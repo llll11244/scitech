@@ -121,9 +121,12 @@ def load(path):
         return ET.fromstring(z.read('word/document.xml'))
 
 
-def save(root, out, src):
-    # 版式收紧,压回两页内(原 .doc 排版在 LibreOffice 下空表即 3 页):
-    # ①页边距 1800→900/上下 600 ②表格 100% 自适应 ③空格子只留 1 段(表尾注已随净版改造删除,标题保持原字号)
+def save(root, out, src, mode='tight'):
+    """版式处理分档:
+    tight=极限压缩(登记/验收:2 页硬约束,空段每格≤2+行高>800 钳 800);
+    mid=中度(变更表:空段每格≤1+行高>1000 钳 1000,压掉溢出即可,保住整页饱满);
+    light=轻(报告:单页大正文格,仅边距/表宽/段距清零,保留自然留白撑满页面)。"""
+    # ①页边距 1800→900/上下 600 ②表格 100% 自适应(两种档位都做)
     for mg in root.iter(W + 'pgMar'):
         mg.set(W + 'left', '900')
         mg.set(W + 'right', '900')
@@ -149,10 +152,11 @@ def save(root, out, src):
                 # 全空格子:只留一段(多余空段占行高)
                 for extra in ps[1:]:
                     tc.remove(extra)
-            else:
-                # 非空格:空段每格至多留 2(总结格原 14 空段、报告正文格 20 空段占高)
+            elif mode != 'light':
+                # tight:非空格空段每格至多留 2;mid:至多留 1(压掉溢出行即可)
+                keep = 2 if mode == 'tight' else 1
                 empty_idx = [i for i, x in enumerate(texts) if not x]
-                for i in empty_idx[2:]:
+                for i in empty_idx[keep:]:
                     tc.remove(ps[i])
         # 表内段落间距清零(段前后 0、行距单倍)——Word 表格默认间距在 LibreOffice 下更占高
         for p in tbl.iter(W + 'p'):
@@ -166,22 +170,24 @@ def save(root, out, src):
                 if sp.get(W + 'line'):
                     sp.set(W + 'line', '240')
                     sp.set(W + 'lineRule', 'auto')
-    # 行高钳制:大留白行(>800 twips)压回 800,简介/进度标记行豁免(保持 2000 供内容展开)
-    for tr in root.iter(W + 'tr'):
-        trPr = tr.find(W + 'trPr')
-        if trPr is None:
-            continue
-        th = trPr.find(W + 'trHeight')
-        if th is None:
-            continue
-        try:
-            v = int(th.get(W + 'val', '0'))
-        except ValueError:
-            continue
-        joined = ''.join(t.text or '' for t in tr.iter(W + 't'))
-        if v > 800 and not any(k in joined for k in ('项目简介', '项目计划进度')):
-            th.set(W + 'val', '800')
-            th.set(W + 'hRule', 'atLeast')
+    if mode != 'light':
+        # 行高钳制:tight>800→800 / mid>1000→1000;简介/进度标记行豁免(保持 2000 供内容展开)
+        cap = 800 if mode == 'tight' else 1000
+        for tr in root.iter(W + 'tr'):
+            trPr = tr.find(W + 'trPr')
+            if trPr is None:
+                continue
+            th = trPr.find(W + 'trHeight')
+            if th is None:
+                continue
+            try:
+                v = int(th.get(W + 'val', '0'))
+            except ValueError:
+                continue
+            joined = ''.join(t.text or '' for t in tr.iter(W + 't'))
+            if v > cap and not any(k in joined for k in ('项目简介', '项目计划进度')):
+                th.set(W + 'val', str(cap))
+                th.set(W + 'hRule', 'atLeast')
     # 注:原"表尾注缩9pt"逻辑已删——净版改造清空表尾注后,它只会误伤表格外的主标题
     # (曾把 16pt 标题压成 9pt);标题保持原版字号(登记/变更/验收 16pt,报告 18pt)
     with zipfile.ZipFile(src) as zin, zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED) as zout:
@@ -483,25 +489,25 @@ def make_report(root):
 
 SRC_DIR = os.path.dirname(os.path.abspath(__file__))
 JOBS = [
-    ('附件1：成都轻工职业技术大学横向项目登记表【双面打印，控制在两页内】.docx', 'hx_register.docx', make_register),
-    ('附件2：成都轻工职业技术大学横向项目重要事项变更表.docx', 'hx_change.docx', make_change),
-    ('附件3（含学生版）：成都轻工职业技术大学横向项目验收登记表【双面打印，控制在两页内】.docx', 'hx_acceptance.docx', make_acceptance),
-    ('附件4：横向科研项目验收报告.docx', 'hx_report.docx', make_report),
+    ('附件1：成都轻工职业技术大学横向项目登记表【双面打印，控制在两页内】.docx', 'hx_register.docx', make_register, 'tight'),
+    ('附件2：成都轻工职业技术大学横向项目重要事项变更表.docx', 'hx_change.docx', make_change, 'mid'),
+    ('附件3（含学生版）：成都轻工职业技术大学横向项目验收登记表【双面打印，控制在两页内】.docx', 'hx_acceptance.docx', make_acceptance, 'tight'),
+    ('附件4：横向科研项目验收报告.docx', 'hx_report.docx', make_report, 'light'),
 ]
 
 
 def main():
     only = sys.argv[1] if len(sys.argv) > 1 else None
-    for src_name, out_name, fn in JOBS:
+    for src_name, out_name, fn, mode in JOBS:
         if only and only not in out_name:
             continue
         src = os.path.join(SRC_DIR, src_name)
         out = os.path.join(SRC_DIR, out_name)
         root = load(src)
         fn(root)
-        # C类:表尾办理说明统一清除(净版;文案迁 templates-src/填写提示.md)
+        # C类:表尾办理说明统一清除(净版源已无,防御性保留;文案迁 templates-src/填写提示.md)
         remove_all_paras(root, contains_any('一式四份', '一式三份', '骑缝章', '签名处须手写'))
-        save(root, out, src)
+        save(root, out, src, mode)
         print('OK', out_name)
 
 
