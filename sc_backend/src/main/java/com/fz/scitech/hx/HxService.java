@@ -237,7 +237,16 @@ public class HxService {
         if (dto.getFlowId() == null) {
             flowMapper.insert(flow);
         } else {
-            flowMapper.updateById(flow);
+            // NOT_NULL 字段策略下 updateById 跳过实体 null 字段:教师勾掉「项目经费/执行周期/负责人」
+            // 后 DTO 置 null 的字段旧值残留,与"整体覆盖"语义相悖——编辑路径改显式 .set(null 也写)
+            flowMapper.update(null, new LambdaUpdateWrapper<RpHxFlow>()
+                    .eq(RpHxFlow::getId, flow.getId())
+                    .set(RpHxFlow::getChangeType, flow.getChangeType())
+                    .set(RpHxFlow::getChangeContent, flow.getChangeContent())
+                    .set(RpHxFlow::getChangeReason, flow.getChangeReason())
+                    .set(RpHxFlow::getNewAmount, flow.getNewAmount())
+                    .set(RpHxFlow::getNewEndDate, flow.getNewEndDate())
+                    .set(RpHxFlow::getNewLeaderId, flow.getNewLeaderId()));
         }
         return flow.getId();
     }
@@ -247,7 +256,8 @@ public class HxService {
         if (isBlank(changeType)) {
             throw new BizException("变更类型必填");
         }
-        List<String> types = Arrays.asList(changeType.split(","));
+        // 逐项 trim:防「项目经费, 执行周期」带空格勾不上(与 RenderModelBuilder.splitTrim 同口径)
+        List<String> types = Arrays.stream(changeType.split(",")).map(String::trim).collect(Collectors.toList());
         if (types.contains("项目经费") && newAmount == null) {
             throw new BizException("变更类型含「项目经费」,须填写变更后经费");
         }
@@ -327,7 +337,15 @@ public class HxService {
         if (dto.getFlowId() == null) {
             flowMapper.insert(flow);
         } else {
-            flowMapper.updateById(flow);
+            // 同变更编辑路径:NOT_NULL 策略下 updateById 跳过 null 字段(教师清空 isOnTime/usedAmount
+            // 等可空表单字段时旧值残留),改显式 .set 整体覆盖(null 也写)
+            flowMapper.update(null, new LambdaUpdateWrapper<RpHxFlow>()
+                    .eq(RpHxFlow::getId, flow.getId())
+                    .set(RpHxFlow::getUsedAmount, flow.getUsedAmount())
+                    .set(RpHxFlow::getIsOnTime, flow.getIsOnTime())
+                    .set(RpHxFlow::getOutcomeForm, flow.getOutcomeForm())
+                    .set(RpHxFlow::getAcceptSummary, flow.getAcceptSummary())
+                    .set(RpHxFlow::getReportContent, flow.getReportContent()));
         }
         replaceMembers(project.getId(), dto.getMembers(), username);
         return flow.getId();

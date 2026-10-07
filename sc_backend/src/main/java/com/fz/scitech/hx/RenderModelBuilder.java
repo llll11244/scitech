@@ -66,6 +66,12 @@ public class RenderModelBuilder {
         return sb.toString();
     }
 
+    /** 逗号多选拆分+逐项 trim(null→空数组):防「项目经费, 执行周期」带空格导致勾选不命中(HxService 校验同口径) */
+    static String[] splitTrim(String s) {
+        return s == null ? new String[0]
+                : Arrays.stream(s.split(",")).map(String::trim).toArray(String[]::new);
+    }
+
     /** 报告表"是否按期完成"专用:原表排版=标签在前,两空格分隔(是√  否□) */
     static String onTimeChecks(Integer isOnTime) {
         return isOnTime != null && isOnTime == 1 ? "是√  否□" : "是□  否√";
@@ -117,7 +123,7 @@ public class RenderModelBuilder {
         Map<String, Object> m = base(p);
         m.put("projectTypeChecks", checks(dictLabels("hx_project_type"), hx.getProjectType()));
         m.put("leaderPhone", s(leaderPhone));
-        String[] types = flow.getChangeType() == null ? new String[0] : flow.getChangeType().split(",");
+        String[] types = splitTrim(flow.getChangeType());
         m.put("changeTypeChecks", checks(dictLabels("change_type"), types));
         m.put("changeContent", s(flow.getChangeContent()));
         m.put("changeReason", s(flow.getChangeReason()));
@@ -149,8 +155,7 @@ public class RenderModelBuilder {
         }
         putRows(m, "s", students(members), "name", "studentNo", "major", "mentor", "duty");
         m.put("finishDate", ""); // 验收确认日,N4 终版渲染
-        m.put("outcomeFormChecks", checks(dictLabels("hx_outcome_form"),
-                flow.getOutcomeForm() == null ? new String[0] : flow.getOutcomeForm().split(",")));
+        m.put("outcomeFormChecks", checks(dictLabels("hx_outcome_form"), splitTrim(flow.getOutcomeForm())));
         m.put("acceptSummary", s(flow.getAcceptSummary()));
         m.put("verifiedAmountWan", ""); // 核定 N4 录入
         return m;
@@ -161,8 +166,7 @@ public class RenderModelBuilder {
         Map<String, Object> m = base(p);
         m.put("onTimeChecks", onTimeChecks(flow.getIsOnTime()));
         m.put("projectTypeChecks", checks(dictLabels("hx_project_type"), hx.getProjectType()));
-        m.put("outcomeFormChecks", checks(dictLabels("hx_outcome_form"),
-                flow.getOutcomeForm() == null ? new String[0] : flow.getOutcomeForm().split(",")));
+        m.put("outcomeFormChecks", checks(dictLabels("hx_outcome_form"), splitTrim(flow.getOutcomeForm())));
         // 区块对 {{?reportParagraphs}}{{this}}{{/reportParagraphs}}:poi-tl 1.12.2 的 {{this}} 只解析
         // Map 元素键(List<String> 元素实测渲染为空),故每段包为 {"this": 段文本}
         m.put("reportParagraphs", flow.getReportContent() == null || flow.getReportContent().isBlank()

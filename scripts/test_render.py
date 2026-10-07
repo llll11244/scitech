@@ -59,6 +59,10 @@ def main():
             with _zip.ZipFile(_io.BytesIO(resp.content)) as z:
                 xml = z.read("word/document.xml").decode("utf-8", "ignore")
                 ok = "{{" not in xml
+                if t == "hx_report":
+                    # 正文存在性断言(终审 F3):{{this}} List 缺陷的失败模式=渲空,
+                    # 「无 {{ 残留」会放行;模板本身无该串(净版),出现即证样例正文真渲染
+                    ok = ok and "项目目标达成情况" in xml
         check("docx预览 " + t, ok, "%d bytes" % len(resp.content))
 
     # 4. 交付开关读数(sys_config.deliver_pdf_visible,默认 false=隐藏 PDF 入口)

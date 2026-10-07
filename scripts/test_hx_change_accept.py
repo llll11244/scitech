@@ -88,6 +88,20 @@ def main():
     r = post("/hx/change/draft", t, dict(chg, flowId=cfid, changeType="项目经费,委托内容"))
     check("变更必填联动拦截", r.get("code") != 0, str(r.get("msg")))
 
+    # 4b. 编辑路径空值显式置空(终审 F1,MP NOT_NULL 策略):先存含"项目经费"草稿,
+    #     再改存纯"委托内容"草稿,详情 newAmount 须为空(旧实现 updateById 残留 360000)
+    r = post("/hx/change/draft", t, dict(chg, flowId=cfid, changeType="项目经费",
+                                         newAmount="360000.00", newEndDate=None, newLeaderId=None))
+    assert r.get("code") == 0, "F1 前置:含项目经费草稿保存失败:" + str(r)
+    d = requests.get(BASE + "/hx/%d" % cfid, headers=t, timeout=30).json()["data"]
+    had = d["flow"].get("newAmount") is not None
+    r = post("/hx/change/draft", t, dict(chg, flowId=cfid, changeType="委托内容",
+                                         newAmount=None, newEndDate=None, newLeaderId=None))
+    assert r.get("code") == 0, "F1 前置:改存纯委托内容草稿失败:" + str(r)
+    d = requests.get(BASE + "/hx/%d" % cfid, headers=t, timeout=30).json()["data"]
+    check("变更草稿编辑空值显式置空", had and d["flow"].get("newAmount") is None,
+          "newAmount=%r" % d["flow"].get("newAmount"))
+
     # 5. acceptance/draft 保存(is_on_time/outcome_form/成员 ratio+amount/学生/report_content)
     acc = {"projectId": pid, "usedAmount": "348000.00", "isOnTime": 1,
            "outcomeForm": "技术报告,专利", "acceptSummary": "全部委托内容已完成并验收",
@@ -112,6 +126,13 @@ def main():
                              "data": dict(acc, flowId=afid)}, timeout=60)
     check("验收分屏预览两张模板", preview_ok(pa) and preview_ok(pr),
           "acceptance=%dB report=%dB" % (len(pa.content), len(pr.content)))
+
+    # 6b. 验收编辑路径空值显式置空(终审 F1 同款):改存草稿清空 isOnTime,详情须为空
+    r = post("/hx/acceptance/draft", t, dict(acc, flowId=afid, isOnTime=None))
+    assert r.get("code") == 0, "F1 前置:验收草稿改存失败:" + str(r)
+    d = requests.get(BASE + "/hx/%d" % afid, headers=t, timeout=30).json()["data"]
+    check("验收草稿编辑空值显式置空", d["flow"].get("isOnTime") is None,
+          "isOnTime=%r" % d["flow"].get("isOnTime"))
 
     # 7. acceptance/submit → 期望拒绝(未确认)
     r = post("/hx/acceptance/submit", t, {"flowId": afid})
