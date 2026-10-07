@@ -378,6 +378,18 @@ def insert_cell_by_text(root, marker, ph):
     raise RuntimeError('未找到含 %s 的格子' % marker)
 
 
+def strip_checkbox_syms(root):
+    """删除 Wingdings 空心方框符号(<w:sym w:font='Wingdings' w:char='00A8'>):原版勾选组
+    每个选项前的空选框(纯符号节点,dump/文字比对不可见)。占位符值自带 √/□ 方框,
+    不删会与值里的方框叠加——PDF 里选项后多出一串小方框的元凶。"""
+    n = 0
+    for r in root.iter(W + 'r'):
+        for sym in list(r.findall(W + 'sym')):
+            r.remove(sym)
+            n += 1
+    return n
+
+
 def strip_trailing_empty_paras(root):
     """body 末尾拖尾空段只保留 1 个(表格后必须有段落;多余空段在 LibreOffice 下顶出空白页)"""
     body = root.find(W + 'body')
@@ -609,9 +621,10 @@ def main():
         fn(root)
         # C类:表尾办理说明统一清除(净版源已无,防御性保留;文案迁 templates-src/填写提示.md)
         remove_all_paras(root, contains_any('一式四份', '一式三份', '骑缝章', '签名处须手写'))
+        strip_checkbox_syms(root)
         strip_trailing_empty_paras(root)
         save(root, out, src, mode)
-        print('OK', out_name)
+        print('OK', out_name, '(sym框已清)')
 
 
 if __name__ == '__main__':
