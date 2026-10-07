@@ -145,13 +145,14 @@ public class PdfRenderService {
 
     /**
      * 附件 biz_type 按 tplType 推导(Task21 验收双单据):hx_report→hx_report_docx/hx_report_pdf
-     * (验收详情/下载按此区分两张),其余流程维持 hx_docx/hx_pdf;终版前缀 hx_final_ 不变。
+     * (验收详情/下载按此区分两张),其余流程维持 hx_docx/hx_pdf。
+     * 终版(N4 验收确认)同样分 tplType:hx_final_docx 与 hx_final_report_docx——
+     * 终版前缀与报告段叠加,否则验收两张终版互混成同一 biz_type(N3 终审注意②)。
      */
     private static String stem(RenderContext ctx, String ext) {
-        if (ctx.finalVersion()) {
-            return "hx_final_" + ext;
-        }
-        return ("hx_report".equals(ctx.tplType()) ? "hx_report_" : "hx_") + ext;
+        String prefix = ctx.finalVersion() ? "hx_final" : "hx";
+        String reportSeg = "hx_report".equals(ctx.tplType()) ? "_report" : "";
+        return prefix + reportSeg + "_" + ext;
     }
 
     /** 预览渲染(决策#36):字节流返回,不落盘不登记;页数超限不抛错(预览如实反映,由前端提示) */

@@ -246,7 +246,7 @@ CREATE TABLE IF NOT EXISTS rp_budget (
 CREATE TABLE IF NOT EXISTS rp_attachment (
   id BIGINT NOT NULL AUTO_INCREMENT,
   project_id BIGINT NOT NULL COMMENT '→rp_project',
-  biz_type VARCHAR(16) NOT NULL COMMENT 'hx_apply申报佐证/hx_scan盖章扫描件/hx_final终版数据PDF/hx_pdf过程待签PDF(含作废版)/hx_extra验收另附材料',
+  biz_type VARCHAR(32) NOT NULL COMMENT 'hx_apply申报佐证/hx_scan盖章扫描件/hx_final_docx|pdf终版/hx_final_report_docx|pdf验收报告终版/hx_docx|pdf待签/hx_report_docx|pdf验收报告待签(含作废版)/hx_extra另附材料',
   doc_type VARCHAR(64) DEFAULT NULL COMMENT '文档类型(字典hx_scan_doc_type:登记表/变更表/验收登记表/验收报告;另含合同)',
   file_name VARCHAR(255) NOT NULL COMMENT '原始文件名',
   file_path VARCHAR(500) NOT NULL COMMENT '存储相对路径(相对上传根目录)',
@@ -259,6 +259,10 @@ CREATE TABLE IF NOT EXISTS rp_attachment (
   PRIMARY KEY (id),
   KEY idx_project_biz (project_id, biz_type)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='项目附件表(逻辑删仅标记,磁盘文件保留,决策#34-⑧)';
+
+-- Task24(2026-10-08):终版双出 biz_type 最长 hx_final_report_docx=20 字符,历史库列宽 16 升 32
+-- (幂等:MODIFY 同定义重复执行无副作用;IF NOT EXISTS 建表不会改已有表,老库靠本行补齐)
+ALTER TABLE rp_attachment MODIFY biz_type VARCHAR(32) NOT NULL COMMENT 'hx_apply申报佐证/hx_scan盖章扫描件/hx_final_docx|pdf终版/hx_final_report_docx|pdf验收报告终版/hx_docx|pdf待签/hx_report_docx|pdf验收报告待签(含作废版)/hx_extra另附材料';
 
 CREATE TABLE IF NOT EXISTS rp_funding_record (
   id BIGINT NOT NULL AUTO_INCREMENT,

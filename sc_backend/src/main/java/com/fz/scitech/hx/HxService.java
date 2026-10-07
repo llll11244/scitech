@@ -68,6 +68,8 @@ import java.util.stream.Collectors;
  * 影响行数 0 抛「状态已变化」防并发双提;教师越权防线=每条查询/更新强制 apply_user_id 归属校验(spec §6.4)。
  * Task20 登记流程;Task21 变更/验收:变更在途唯一+验收每项目一张(spec §6.1),
  * draft 不校验项目确认态(教师可提前起草),submit 强校验 audit_status=2。
+ * Task24:退回单(status=4)允许教师编辑草稿数据(改数据→resubmit 重交,也可直接重交,
+ * 编辑本身不迁移状态,4→1 由 resubmit 显式做);科技处审批副作用见同包 HxAuditService。
  */
 @Slf4j
 @Service
@@ -145,10 +147,11 @@ public class HxService {
             flowId = flow.getId();
         } else {
             RpHxFlow flow = ownedFlow(uid, dto.getFlowId());
-            if (flow.getStatus() != HxFlowStatus.DRAFT) {
-                throw new BizException("仅草稿可编辑");
+            // 退回单(4)也允许编辑(退回修改重交流程,Task24):改数据→resubmit;编辑不迁移状态
+            if (flow.getStatus() != HxFlowStatus.DRAFT && flow.getStatus() != HxFlowStatus.REJECTED) {
+                throw new BizException("仅草稿/退回单可编辑");
             }
-            guardDraft(flow.getId(), "仅草稿可编辑");   // 条件占位防并发提交竞态(决策#34-②)
+            guardEditable(flow.getId(), "仅草稿/退回单可编辑");   // 条件占位防并发提交竞态(决策#34-②)
             flowId = flow.getId();
             project = projectMapper.selectById(flow.getProjectId());
             project.setName(dto.getName());
@@ -476,6 +479,24 @@ public class HxService {
         saveRecord(flow, HxFlowStatus.ACT_WITHDRAW, username, uid, null);
     }
 
+    // ---------- 退回修改重交(三流程共用,Task24) ----------
+    /**
+     * 退回单重交(spec §3.2):status 4→1,重新渲染待签双出;
+     * 旧待签件由 renderDeliverables 前缀作废,旧扫描件一并作废(需重新盖章回扫)。
+     * 教师改数据走 saveXxxDraft(status=4 允许编辑),不改也可直接重交。
+     */
+    @Transactional
+    public void resubmit(Long uid, String username, Long flowId) {
+        RpHxFlow flow = ownedFlow(uid, flowId);
+        if (flow.getStatus() != HxFlowStatus.REJECTED) {
+            throw new BizException("仅退回单可重交");
+        }
+        transit(flowId, HxFlowStatus.REJECTED, HxFlowStatus.SUBMITTED);
+        invalidateOld(flow, "scan", null, "hx_scan");   // 旧扫描件作废(§3.2:重新生成 PDF 须重新盖章)
+        renderDeliverables(flow, uid, username);        // 旧待签作废+重渲(内部按前缀处理)
+        saveRecord(flow, HxFlowStatus.ACT_RESUBMIT, username, uid, null);
+    }
+
     // ---------- 回扫 ----------
     /**
      * 盖章扫描件上传:status 1→2;已回扫(2)重传=按 docType 覆盖,旧件作废(决策#34-④ 每类仅最新一份生效)。
@@ -721,8 +742,8 @@ public class HxService {
         }
     }
 
-    /** 项目扩展行必在(登记保存即建);缺失=数据异常,防御 NPE 直接拒 */
-    private RpHxProject requireHx(Long projectId) {
+    /** 项目扩展行必在(登记保存即建);缺失=数据异常,防御 NPE 直接拒(包级:HxAuditService 终版渲染复用) */
+    RpHxProject requireHx(Long projectId) {
         RpHxProject hx = hxMapper.selectById(projectId);
         if (hx == null) {
             throw new BizException("项目扩展信息缺失(rp_hx_project 无行)");
@@ -839,19 +860,19 @@ public class HxService {
         return p;
     }
 
-    /** change/acceptance 草稿编辑前置:本人+流程类型一致+项目一致+草稿态,条件占位防并发提交竞态 */
+    /** change/acceptance 草稿编辑前置:本人+流程类型一致+项目一致+草稿/退回态(Task24 放宽),条件占位防并发提交竞态 */
     private RpHxFlow editableDraftFlow(Long uid, Long flowId, String flowType, Long projectId) {
         RpHxFlow flow = ownedFlow(uid, flowId);
         if (!flowType.equals(flow.getFlowType())) {
             throw new BizException("流程单类型不符");
         }
-        if (flow.getStatus() != HxFlowStatus.DRAFT) {
-            throw new BizException("仅草稿可编辑");
+        if (flow.getStatus() != HxFlowStatus.DRAFT && flow.getStatus() != HxFlowStatus.REJECTED) {
+            throw new BizException("仅草稿/退回单可编辑");
         }
         if (!flow.getProjectId().equals(projectId)) {
             throw new BizException("流程单与项目不一致");
         }
-        guardDraft(flow.getId(), "仅草稿可编辑");
+        guardEditable(flow.getId(), "仅草稿/退回单可编辑");
         return flow;
     }
 
@@ -882,8 +903,8 @@ public class HxService {
         }
     }
 
-    /** 到账累计(元):rp_funding_record 实时 SUM(决策#16 不冗余);无记录返回 null(渲染空串) */
-    private BigDecimal receivedTotal(Long projectId) {
+    /** 到账累计(元):rp_funding_record 实时 SUM(决策#16 不冗余);无记录返回 null(渲染空串)(包级:HxAuditService 复用) */
+    BigDecimal receivedTotal(Long projectId) {
         List<RpFundingRecord> rows = fundingMapper.selectList(new LambdaQueryWrapper<RpFundingRecord>()
                 .eq(RpFundingRecord::getProjectId, projectId));
         return rows.isEmpty() ? null : rows.stream().map(RpFundingRecord::getAmount)
@@ -911,6 +932,17 @@ public class HxService {
         guardStatus(flowId, HxFlowStatus.DRAFT, rejectMsg);
     }
 
+    /** 草稿/退回态条件占位(guardDraft 放宽版,Task24 退回修改重交):编辑允许 status∈{0,4},WHERE IN 验行数 */
+    private void guardEditable(Long flowId, String rejectMsg) {
+        int rows = flowMapper.update(null, new LambdaUpdateWrapper<RpHxFlow>()
+                .eq(RpHxFlow::getId, flowId)
+                .in(RpHxFlow::getStatus, HxFlowStatus.DRAFT, HxFlowStatus.REJECTED)
+                .set(RpHxFlow::getUpdateTime, LocalDateTime.now()));
+        if (rows == 0) {
+            throw new BizException(rejectMsg);
+        }
+    }
+
     /** 指定状态条件占位(guardDraft 泛化:读后写窗口内状态被并发迁移即拒,如回扫重传 vs 审批通过) */
     private void guardStatus(Long flowId, int status, String rejectMsg) {
         int rows = flowMapper.update(null, new LambdaUpdateWrapper<RpHxFlow>()
@@ -921,7 +953,8 @@ public class HxService {
         }
     }
 
-    private void saveRecord(RpHxFlow flow, String action, String operatorName, Long operatorId, String opinion) {
+    /** 流程留痕(包级:HxAuditService 审批动作同口径复用) */
+    void saveRecord(RpHxFlow flow, String action, String operatorName, Long operatorId, String opinion) {
         RpHxFlowRecord r = new RpHxFlowRecord();
         r.setProjectId(flow.getProjectId());
         r.setFlowId(flow.getId());
@@ -1031,8 +1064,8 @@ public class HxService {
         hx.setProgressPlan(h.getProgressPlan());
     }
 
-    /** 渲染前填充 RpProject 非表列:deptName(按 dept_id)、leaderPhone(按 apply_user_id) */
-    private void fillTransient(RpProject p) {
+    /** 渲染前填充 RpProject 非表列:deptName(按 dept_id)、leaderPhone(按 apply_user_id)(包级:HxAuditService 复用) */
+    void fillTransient(RpProject p) {
         if (p.getDeptId() != null) {
             SysDept d = deptMapper.selectById(p.getDeptId());
             p.setDeptName(d == null ? null : d.getName());

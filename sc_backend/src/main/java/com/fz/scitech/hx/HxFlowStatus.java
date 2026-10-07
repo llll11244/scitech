@@ -14,4 +14,9 @@ public final class HxFlowStatus {
     public static final String ACT_WITHDRAW = "withdraw";
     public static final String ACT_UPLOAD_SCAN = "upload_scan";
     public static final String ACT_RESUBMIT = "resubmit";
+    /** N4 科技处审批动作(spec §3.2/§3.3;precheck_reject=盖章前预检退回) */
+    public static final String ACT_APPROVE = "approve";
+    public static final String ACT_VERIFY = "verify";
+    public static final String ACT_REJECT = "reject";
+    public static final String ACT_PRECHECK_REJECT = "precheck_reject";
 }

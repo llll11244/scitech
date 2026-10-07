@@ -110,6 +110,13 @@ public class HxController {
         return Result.ok(null);
     }
 
+    /** 退回单修改重交(Task24:4→1,重渲待签双出,旧待签+旧扫描件作废;教师本人) */
+    @PostMapping("/{flowId}/resubmit")
+    public Result<Void> resubmit(@PathVariable Long flowId, HttpServletRequest request) {
+        hxService.resubmit(uid(request), username(request), flowId);
+        return Result.ok(null);
+    }
+
     /** 盖章扫描件上传(重传同类型覆盖,旧件作废) */
     @PostMapping("/{flowId}/scan")
     public Result<Long> scan(@PathVariable Long flowId, @RequestParam String docType,
