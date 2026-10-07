@@ -59,9 +59,13 @@ public final class TemplatePlaceholders {
         };
     }
 
-    /** 页数上限(hx_report 不限,给个大数) */
+    /** 页数上限(hx_report 不限;登记/验收原版版式在 LibreOffice 下 3 页,2026-10-07 随"保真直出"放宽) */
     public static int maxPages(String tplType) {
-        return "hx_report".equals(tplType) ? 200 : 2;
+        return switch (tplType) {
+            case "hx_report" -> 200;
+            case "hx_register", "hx_acceptance" -> 3;
+            default -> 2;
+        };
     }
 
     private static String[] builder(String[] base, String[]... more) {

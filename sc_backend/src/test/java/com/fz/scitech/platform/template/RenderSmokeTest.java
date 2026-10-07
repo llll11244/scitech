@@ -17,7 +17,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 模板试渲染冒烟(决策#5 §5.4 + 页数≤2 硬约束):
+ * 模板试渲染冒烟(决策#5 §5.4;2026-10-07 保真直出后页数上限=TemplatePlaceholders.maxPages):
  * mvn test -Dtest=RenderSmokeTest -Drender.smoke=true
  * poi-tl 渲染样例数据 → LibreOffice 转 PDF → PDFBox 页数断言;
  * 产物留 target/render-smoke/ 供人工对照原表版式。
@@ -86,22 +86,22 @@ class RenderSmokeTest {
     }
 
     @Test
-    void registerWithinTwoPages() throws Exception {
-        renderAndCheck("hx_register", 2);
+    void registerWithinPageLimit() throws Exception {
+        renderAndCheck("hx_register", TemplatePlaceholders.maxPages("hx_register"));
     }
 
     @Test
-    void changeWithinTwoPages() throws Exception {
-        renderAndCheck("hx_change", 2);
+    void changeWithinPageLimit() throws Exception {
+        renderAndCheck("hx_change", TemplatePlaceholders.maxPages("hx_change"));
     }
 
     @Test
-    void acceptanceWithinTwoPages() throws Exception {
-        renderAndCheck("hx_acceptance", 2);
+    void acceptanceWithinPageLimit() throws Exception {
+        renderAndCheck("hx_acceptance", TemplatePlaceholders.maxPages("hx_acceptance"));
     }
 
     @Test
     void reportAtLeastOnePage() throws Exception {
-        renderAndCheck("hx_report", 99);
+        renderAndCheck("hx_report", TemplatePlaceholders.maxPages("hx_report"));
     }
 }

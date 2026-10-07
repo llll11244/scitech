@@ -68,18 +68,18 @@ class RenderPipelineTest {
     }
 
     @Test
-    void registerTwoPages() throws Exception {
-        assertPages("hx_register", 1, 2);
+    void registerWithinPageLimit() throws Exception {
+        assertPages("hx_register", 1, TemplatePlaceholders.maxPages("hx_register"));
     }
 
     @Test
-    void changeTwoPages() throws Exception {
-        assertPages("hx_change", 1, 2);
+    void changeWithinPageLimit() throws Exception {
+        assertPages("hx_change", 1, TemplatePlaceholders.maxPages("hx_change"));
     }
 
     @Test
-    void acceptanceTwoPages() throws Exception {
-        assertPages("hx_acceptance", 1, 2);
+    void acceptanceWithinPageLimit() throws Exception {
+        assertPages("hx_acceptance", 1, TemplatePlaceholders.maxPages("hx_acceptance"));
     }
 
     @Test

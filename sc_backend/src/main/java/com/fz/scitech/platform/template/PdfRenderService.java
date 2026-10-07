@@ -22,7 +22,7 @@ import java.time.format.DateTimeFormatter;
 /**
  * PDF 渲染管线(决策#4/#34-③/#36):
  * model(业务模块组装,含勾选组/大写金额/万元换算) → poi-tl 填当前启用版模板(临时 docx)
- * → PdfConverter 转 PDF → 页数校验(≤2,报告类除外) → PDF 元数据(title=流程单号,author=操作人)
+ * → PdfConverter 转 PDF → 页数校验(≤TemplatePlaceholders.maxPages,保真直出后登记/验收 3 页) → PDF 元数据(title=流程单号,author=操作人)
  * → 落盘 upload/hx/{projectId}/{flowType}/{flowId}/ → rp_attachment 登记。
  * 失败抛异常不落半成品:一切中间产物(含已落盘未登记的 PDF)清理后才抛。
  */

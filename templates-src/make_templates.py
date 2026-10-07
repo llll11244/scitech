@@ -340,6 +340,20 @@ def insert_cell_by_text(root, marker, ph):
     raise RuntimeError('未找到含 %s 的格子' % marker)
 
 
+def strip_trailing_empty_paras(root):
+    """删 body 末尾的拖尾空段(表后空段在 LibreOffice 下会顶出一张空白页;Word 里无视觉差异)"""
+    body = root.find(W + 'body')
+    if body is None:
+        return
+    for c in reversed(list(body)):
+        if c.tag == W + 'sectPr':
+            continue
+        if c.tag == W + 'p' and not para_text(c).strip():
+            body.remove(c)
+        else:
+            break
+
+
 def trim_cell_empties(root, marker, keep):
     """定位全文含 marker 的单元格,空段只保留前 keep 个——报告正文格尾随空段收敛"""
     for tc in root.iter(W + 'tc'):
@@ -448,9 +462,7 @@ def make_register(root):
 
     make_fixed_rows(root, ('姓名', '所在单位', '职称', '专业', '承担本项目的工作任务'),
                     ['', 'name', 'unit', 'title', 'major', 'duty'], 6, 'm')
-    # 简介/进度格固定行高压缩(200-300 字按压缩行宽 4~5 行足够,原留白过大)
-    shrink_row_height(root, '项目简介', 2000)
-    shrink_row_height(root, '项目计划进度', 2000)
+    # 保真模式:不再压简介/进度行高(原 shrink 2000 已删,行高保持用户纯净版原样)
 
 
 def shrink_row_height(root, row_key, new_height):
@@ -539,9 +551,9 @@ def make_report(root):
 
 SRC_DIR = os.path.dirname(os.path.abspath(__file__))
 JOBS = [
-    ('附件1：成都轻工职业技术大学横向项目登记表【双面打印，控制在两页内】.docx', 'hx_register.docx', make_register, 'tight'),
-    ('附件2：成都轻工职业技术大学横向项目重要事项变更表.docx', 'hx_change.docx', make_change, 'mid'),
-    ('附件3（含学生版）：成都轻工职业技术大学横向项目验收登记表【双面打印，控制在两页内】.docx', 'hx_acceptance.docx', make_acceptance, 'tight'),
+    ('附件1：成都轻工职业技术大学横向项目登记表【双面打印，控制在两页内】.docx', 'hx_register.docx', make_register, 'none'),
+    ('附件2：成都轻工职业技术大学横向项目重要事项变更表.docx', 'hx_change.docx', make_change, 'none'),
+    ('附件3（含学生版）：成都轻工职业技术大学横向项目验收登记表【双面打印，控制在两页内】.docx', 'hx_acceptance.docx', make_acceptance, 'none'),
     ('附件4：横向科研项目验收报告.docx', 'hx_report.docx', make_report, 'none'),
 ]
 
@@ -557,6 +569,7 @@ def main():
         fn(root)
         # C类:表尾办理说明统一清除(净版源已无,防御性保留;文案迁 templates-src/填写提示.md)
         remove_all_paras(root, contains_any('一式四份', '一式三份', '骑缝章', '签名处须手写'))
+        strip_trailing_empty_paras(root)
         save(root, out, src, mode)
         print('OK', out_name)
 
