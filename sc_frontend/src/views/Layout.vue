@@ -18,12 +18,16 @@
             <el-badge v-if="unread > 0" :value="unread" :max="99" class="menu-badge" />
           </el-menu-item>
         </template>
-        <!-- 科技处端(N2 起挂模板管理,N4 起挂横向审批/字典/备份) -->
+        <!-- 科技处端(N4 起挂横向审批/字典/备份) -->
         <template v-else>
           <el-menu-item v-if="userStore.isAdmin" index="/notify">
             <el-icon><Bell /></el-icon>
             <span>消息通知</span>
             <el-badge v-if="unread > 0" :value="unread" :max="99" class="menu-badge" />
+          </el-menu-item>
+          <el-menu-item v-if="userStore.isAdmin" index="/template">
+            <el-icon><Files /></el-icon>
+            <span>模板管理</span>
           </el-menu-item>
         </template>
       </el-menu>
