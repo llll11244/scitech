@@ -209,6 +209,26 @@ def remove_first_para(root, predicate):
                 return
 
 
+def remove_all_paras(root, predicate):
+    """删除所有满足谓词的段落(表内表外都清)——清表尾办理注、意见栏预填文字"""
+    for parent in root.iter():
+        for c in list(parent):
+            if c.tag == W + 'p' and predicate(para_text(c)):
+                parent.remove(c)
+
+
+def clean_cell(root, marker, keep_pred):
+    """定位全文含 marker 的单元格,删除 keep_pred 不保留的段落——清同格残留示例/大纲。
+    签字/年月日为独立段落,用 keep_pred 显式保留(先探段落结构再清,勿盲删)。"""
+    for tc in root.iter(W + 'tc'):
+        if marker not in ''.join(t.text or '' for t in tc.iter(W + 't')):
+            continue
+        for p in list(tc.findall(W + 'p')):
+            if not keep_pred(para_text(p)):
+                tc.remove(p)
+        return
+
+
 def replace_span(root, start_pred, new_text, label, end_pred=lambda s: False):
     """start_pred 命中段重写为 new_text,其后同容器段落删到 end_pred(保留)——清示例残留"""
     for parent in root.iter():
@@ -230,6 +250,12 @@ def contains_all(*keys):
     return pred
 
 
+def contains_any(*keys):
+    def pred(s):
+        return any(k in s for k in keys)
+    return pred
+
+
 def find_row(tbl, *keys):
     for tr in rows(tbl):
         texts = [para_text(p) for tc in cells(tr) for p in cell_paras(tc)]
@@ -239,13 +265,13 @@ def find_row(tbl, *keys):
     return None
 
 
-def insert_cell(root, row_keys, col_index, ph):
-    """定位含 row_keys 的行,向第 col_index(0起)个单元格插占位符"""
+def insert_cell(root, row_keys, col_index, ph, overwrite=False):
+    """定位含 row_keys 的行,向第 col_index(0起)个单元格插占位符;overwrite=True 覆盖既有提示/选项文字"""
     for tbl in all_tables(root):
         tr = find_row(tbl, *row_keys)
         if tr is not None:
             cs = cells(tr)
-            set_cell_placeholder(cs[col_index], ph)
+            set_cell_placeholder(cs[col_index], ph, overwrite)
             return
     raise RuntimeError('未找到行: %s → 列%d 插 %s' % (row_keys, col_index, ph))
 
@@ -354,7 +380,10 @@ def make_change(root):
     replace_first_match(root, contains_all('技术开发', '技术咨询'), '{{projectTypeChecks}}', '项目类型勾选')
     replace_first_match(root, contains_all('项目经费', '执行周期', '其他约定'), '{{changeTypeChecks}}', '变更内容勾选')
     replace_first_match(root, contains_all('对合同约定的关键内容进行调整'), '{{changeContent}}', '变更内容说明')
+    clean_cell(root, '{{changeContent}}', lambda s: '{{changeContent}}' in s)  # 清同格示例残留
     replace_first_match(root, contains_all('示例：因涉及后续收益'), '{{changeReason}}', '变更原因')
+    # 意见栏预填清空(纸面留白,参考措辞迁 templates-src/填写提示.md)
+    remove_all_paras(root, contains_any('同意该项目重要事项的变更'))
 
     insert_cell(root, ('项目名称',), 1, '{{projectName}}')
     insert_cell(root, ('项目编号', '项目类别'), 1, '{{approvalNo}}')
@@ -366,13 +395,17 @@ def make_change(root):
 # 附件3 → hx_acceptance.docx
 # ============================================================
 def make_acceptance(root):
+    replace_first_match(root, contains_all('双面打印控制在2页内'), '项目名称', '表头提示清理')  # 原标签混入打印提示
     replace_first_match(root, contains_all('技术开发', '技术咨询'), '{{projectTypeChecks}}', '项目类型勾选')
     replace_first_match(root, contains_all('年', '月', '至'), '{{startEndDate}}', '起止时间')
     replace_first_match(root, contains_all('政府部门', '企业'), '{{clientNatureChecks}}', '性质勾选')
-    replace_first_match(root, contains_all('成果形式'), '{{outcomeFormChecks}}', '成果形式勾选')
+    # 成果形式:标签保留,占位符覆盖选项文字格(原做法把标签格整个换掉,选项格残留会重复显示)
+    insert_cell(root, ('成果形式', '技术报告'), 1, '{{outcomeFormChecks}}', overwrite=True)
     remove_first_para(root, lambda s: s.strip() in ('举例：', '举例:'))
     replace_span(root, contains_all('目标达成情况'), '{{acceptSummary}}', '完成情况总结',
                  end_pred=lambda s: '项目负责人（签字）' in s)
+    # 意见栏预填清空(纸面留白,参考措辞迁 templates-src/填写提示.md)
+    remove_all_paras(root, contains_any('情况属实，同意验收', '项目团队已于'))
 
     insert_cell(root, ('项目编号', '项目名称'), 1, '{{approvalNo}}')
     insert_cell(root, ('项目编号', '项目名称'), 3, '{{projectName}}')
@@ -402,6 +435,9 @@ def make_report(root):
     replace_first_match(root, contains_all('成果形式（可多选）'), '成果形式（可多选）：{{outcomeFormChecks}}', '成果形式勾选')
     # 正文:整格大段提示 → 段落级区块对循环(poi-tl 区块对支持段落重复)
     replace_first_match(root, contains_all('一、项目目标达成情况'), '{{?reportParagraphs}}{{this}}{{/reportParagraphs}}', '正文提示')
+    # 清残留:说明2段+大纲19段删除,保留占位符段与签字/日期段(纸面净版,大纲迁 templates-src/填写提示.md)
+    clean_cell(root, '{{?reportParagraphs}}',
+               lambda s: '{{?reportParagraphs}}' in s or '项目负责人（签字）' in s or s.strip().startswith('年'))
 
 
 SRC_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -422,6 +458,8 @@ def main():
         out = os.path.join(SRC_DIR, out_name)
         root = load(src)
         fn(root)
+        # C类:表尾办理说明统一清除(净版;文案迁 templates-src/填写提示.md)
+        remove_all_paras(root, contains_any('一式四份', '一式三份', '骑缝章', '签名处须手写'))
         save(root, out, src)
         print('OK', out_name)
 

@@ -42,7 +42,7 @@ DB_URL='jdbc:mysql://...' DB_USER=.. DB_PASSWORD=.. SC_JWT_SECRET='≥32字符' 
 3. **jjwt 弱密钥 fail-fast**:HMAC secret <32 字符直接启动失败(WeakKeyException 240bits)。上线清单:SC_JWT_SECRET 必须 ≥32 字符
 4. el-input 原生 input 无 type attribute(仅 DOM property):浏览器自动化选择器用 `input[placeholder=...]` 而非 `input[type=text]`
 5. **poi-tl 行循环(LoopRowTableRenderPolicy)在 vMerge 大表上删行会引发 XmlValueDisconnectedException** 殃及后续文本标签——模板一律用固定行占位符(m1name..m6duty),不做行循环
-6. **☑(U+2611) 在宋体无字形**,LibreOffice 渲染出豆腐块——勾选输出用 ■/□(U+25A0/U+25A1,SimSun 全覆盖)
+6. **勾选符号字形坑**:☑(U+2611) 宋体无字形→LibreOffice 豆腐块;■(U+25A0) 可用但用户要求打勾样式——**最终方案 √(U+221A,GB2312/宋体全覆盖)+□(U+25A1)**,拼法参照 SampleData.checks;换符号后必重跑渲染冒烟人工核对
 7. **原 .doc 制式表在 LibreOffice 下空表即 3 页**(Word 排版更松):已做版式压缩(边距900/600+表格pct100%+空段清理+简介进度行高2000),四模板 2/2/2/1 页;模板改版后必须重跑 RenderSmokeTest 验页数
 
 ## LibreOffice 部署包(652MB,决策#37)
@@ -69,11 +69,12 @@ token 带 uid claim;AuthInterceptor 每请求按 uid 查库(停用立即 401、r
 - [x] N2-Task12 PdfRenderService 渲染管线(render 落盘+renderPreview 分屏预览;RenderPipelineTest 5/5+test_render.py 8/8) 2026-10-07
 - [x] N2-Task13 模板管理前端页(上传/版本/预览弹窗 blob→iframe) 2026-10-07
 - [x] N2-Task14 验收:JUnit 16/16+脚本 13/13 全绿;部署包演练 716MB→8081 端口全通;**样例 PDF 人工核对待用户确认** 2026-10-07
-- [ ] N3 教师端三流程(rp_hx_* 实体/登记/变更/验收接口+分屏预览页) / N4 科技处端 / N5 整体验收(依赖 N1/N2 实际形态另行编写计划)
+- [x] Task15 模板净版改造:示例/意见预填/表尾注全清+勾选 ■→√(踩坑#6 定稿);提示前移方案落 templates-src/填写提示.md;新模板重入库;JUnit 16/16+脚本 13/13+4 张样例 PDF 目检 2026-10-07
+- [ ] N3 教师端三流程(rp_hx_* 实体/登记/变更/验收接口+分屏预览页;填报页字段提示+预览区办理提示条,文案见 templates-src/填写提示.md) / N4 科技处端 / N5 整体验收(依赖 N1/N2 实际形态另行编写计划)
 
 ## N2 关键交付物速查
 - 渲染管线:`PdfRenderService.render(RenderContext,model)→attachmentId`(落盘 upload/hx/{pid}/{ftype}/{fid}/);`renderPreview(tplType,model)→(pdf字节,页数)`(N3 分屏预览用,决策#36)
-- 模板:templates-src/hx_{register,change,acceptance,report}.docx + make_templates.py(从原始.doc重生成)+占位符清单.md;成员 m1-m6/m8、学生 s1-s4 固定行
+- 模板:templates-src/hx_{register,change,acceptance,report}.docx(2026-10-07 净版:无示例/意见预填/表尾注)+ make_templates.py(从原始.doc重生成,幂等)+占位符清单.md+填写提示.md(迁出提示文案,N3 前端用);成员 m1-m6/m8、学生 s1-s4 固定行;勾选组 √/□
 - 测试全绿口径:mvn test -Drender.smoke=true -Dpdf.smoke=true(16/16);scripts/test_auth.py(4)+test_template.py(5)+test_render.py(8)
 - 部署包=sc-backend.jar+libreoffice/(652MB 裁剪版)+upload/+backup/+mysqldump.exe ≈716MB,任意目录可起(相对路径cwd=包根)
 
