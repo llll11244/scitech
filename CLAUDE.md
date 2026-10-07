@@ -41,6 +41,15 @@ DB_URL='jdbc:mysql://...' DB_USER=.. DB_PASSWORD=.. SC_JWT_SECRET='≥32字符' 
 2. **spring.sql.init 读脚本默认平台编码(GBK)**:UTF-8 脚本写入即乱码(EFBFFD 替换字符)。`spring.sql.init.encoding: UTF-8` 必须显式配置(已配,注意它在 spring: 块下,别插错层级)
 3. **jjwt 弱密钥 fail-fast**:HMAC secret <32 字符直接启动失败(WeakKeyException 240bits)。上线清单:SC_JWT_SECRET 必须 ≥32 字符
 4. el-input 原生 input 无 type attribute(仅 DOM property):浏览器自动化选择器用 `input[placeholder=...]` 而非 `input[type=text]`
+5. **poi-tl 行循环(LoopRowTableRenderPolicy)在 vMerge 大表上删行会引发 XmlValueDisconnectedException** 殃及后续文本标签——模板一律用固定行占位符(m1name..m6duty),不做行循环
+6. **☑(U+2611) 在宋体无字形**,LibreOffice 渲染出豆腐块——勾选输出用 ■/□(U+25A0/U+25A1,SimSun 全覆盖)
+7. **原 .doc 制式表在 LibreOffice 下空表即 3 页**(Word 排版更松):已做版式压缩(边距900/600+表格pct100%+空段清理+简介进度行高2000),四模板 2/2/2/1 页;模板改版后必须重跑 RenderSmokeTest 验页数
+
+## LibreOffice 部署包(652MB,决策#37)
+- 版本 26.2.6.3:官方 MSI(USTC 镜像下载)+ `msiexec /a` 管理解包(免安装) + `scripts/trim_libreoffice.sh` 裁剪(1537→652MB,渲染与裁剪前逐字一致,冷热启动均验)
+- 裁剪守则:只裁他语UI/图标/词典/剪贴画;核心dll/Fonts/icudt/soffice.cfg 绝不动;升级版本后重跑裁剪+冷启动验证
+- 模板字体=宋体(Windows 系统自带);**Linux 部署前需确认中文字体**(无宋体时评估保留 Noto CJK 或系统装字体)
+- 手动 soffice 转换(preview/调试)与运行中的应用进程池会抢 2002 端口——并发时偶发转换失败,错开执行
 
 ## 会话安全(决策#35,开发期已全部落地)
 token 带 uid claim;AuthInterceptor 每请求按 uid 查库(停用立即 401、role 取库中最新);secret 环境变量化;dev 建号/prod 零默认账号;连错5次锁10分钟;登录接口外全部鉴权。**上线只剩配置**:真 secret/HTTPS(Nginx 终止,8080 仅 127.0.0.1)/正式账号强密/内网收紧/CORS 改实际域名
