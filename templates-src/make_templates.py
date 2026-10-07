@@ -42,69 +42,98 @@ for pfx, uri in [
     ET.register_namespace(pfx, uri)
 
 
-FONT_SONG = '宋体'
-
-
-def _set_run_font(r):
-    """run 强制中文字体(宋体含 ☑/□ 字形,避免回退乱码)"""
-    rPr = r.find(W + 'rPr')
-    if rPr is None:
-        rPr = ET.Element(W + 'rPr')
-        r.insert(0, rPr)
-    fonts = rPr.find(W + 'rFonts')
-    if fonts is None:
-        fonts = ET.SubElement(rPr, W + 'rFonts')
-    for attr in ('ascii', 'eastAsia', 'hAnsi', 'cs'):
-        fonts.set(W + attr, FONT_SONG)
-
-
-def add_run_text(p, text):
-    r = ET.SubElement(p, W + 'r')
-    _set_run_font(r)
-    t = ET.SubElement(r, W + 't')
-    t.text = text
-    t.set(XML_SPACE, 'preserve')
+# 保真基线(2026-10-07 定稿):生成模板**不发明任何新格式**——
+# 插入的占位符 run 一律克隆参考 rPr(同格文字 run → 段落标记 rPr,或调用方显式指定),
+# 重写文字只动 <w:t> 不碰 rPr。占位符带什么格式,poi-tl 渲染出的 PDF 就是什么格式。
 
 
 def para_text(p):
     return ''.join(t.text or '' for t in p.iter(W + 't'))
 
 
+def para_mark_rPr(p):
+    """段落标记 rPr(pPr/rPr):Word 表单空格段的"待填格式",空格插占位符的首选参照"""
+    pPr = p.find(W + 'pPr')
+    return pPr.find(W + 'rPr') if pPr is not None else None
+
+
+def run_rPr(r):
+    return r.find(W + 'rPr')
+
+
+def first_text_run(p):
+    """段内第一个有文字的 run(格式参照),无则 None"""
+    for r in p.iter(W + 'r'):
+        if ''.join(t.text or '' for t in r.iter(W + 't')).strip():
+            return r
+    return None
+
+
+def cell_ref_rPr(tc):
+    """格子级格式参照:格内第一个有字 run 的 rPr,退段落标记 rPr"""
+    r = first_text_run(tc)
+    if r is not None and run_rPr(r) is not None:
+        return run_rPr(r)
+    ps = tc.findall(W + 'p')
+    return para_mark_rPr(ps[0]) if ps else None
+
+
+def add_run_text(p, text, ref_rPr=None):
+    """追加 run;ref_rPr 提供时深拷贝其为新 run 格式(保真基线:不造裸 run、不硬编码字体)"""
+    r = ET.SubElement(p, W + 'r')
+    if ref_rPr is not None:
+        r.insert(0, copy.deepcopy(ref_rPr))
+    t = ET.SubElement(r, W + 't')
+    t.text = text
+    t.set(XML_SPACE, 'preserve')
+
+
 def replace_para(p, new_text):
-    """段落全文重写为 new_text:首个 run 保格式重写,其余清空;
-    若首 run 无中文字体设置则补宋体(勾选组/大写金额含 ☑ 等特殊字形)"""
+    """段落全文重写为 new_text:首个 run 保格式重写,其余清空(rPr 一律不动)"""
     ts = list(p.iter(W + 't'))
     if not ts:
-        add_run_text(p, new_text)
+        add_run_text(p, new_text, para_mark_rPr(p))
         return
     ts[0].text = new_text
     ts[0].set(XML_SPACE, 'preserve')
     for t in ts[1:]:
         t.text = ''
-    r = ts[0].getparent() if hasattr(ts[0], 'getparent') else None
-    while r is not None and r.tag != W + 'r':
-        r = r.getparent() if hasattr(r, 'getparent') else None
-    if r is not None:
-        _set_run_font(r)
 
 
-def add_run_text(p, text):
-    r = ET.SubElement(p, W + 'r')
-    t = ET.SubElement(r, W + 't')
-    t.text = text
-    t.set(XML_SPACE, 'preserve')
+def options_to_placeholder(p, ph):
+    """标签+选项同段(如"是否按期完成：是  否"):标签 run 原样保留,
+    占位符写进第一个选项 run 的 <w:t>(继承其 仿宋 等原格式),其余选项 run 清空。
+    无选项 run 时克隆标签 run 格式追加。"""
+    runs = [r for r in p.iter(W + 'r') if ''.join(t.text or '' for t in r.iter(W + 't')).strip()]
+    if len(runs) >= 2:
+        done = False
+        for r in runs[1:]:
+            ts = list(r.iter(W + 't'))
+            if not ts:
+                continue
+            if not done:
+                ts[0].text = ph
+                ts[0].set(XML_SPACE, 'preserve')
+                done = True
+            else:
+                for t in ts:
+                    t.text = ''
+        return
+    ref = run_rPr(runs[0]) if runs else para_mark_rPr(p)
+    add_run_text(p, ph, ref)
 
 
 def cell_paras(tc):
     return tc.findall(W + 'p')
 
 
-def set_cell_placeholder(tc, text, overwrite=False):
-    """往单元格第一段插入占位符文本;overwrite=True 时覆盖既有提示文字"""
+def set_cell_placeholder(tc, text, overwrite=False, ref_rPr=None):
+    """往单元格第一段插入占位符文本;overwrite=True 时覆盖既有选项/提示文字(保留首 run 格式);
+    空格插入时格式参照链:显式 ref_rPr → 格内文字 run → 段落标记 rPr"""
     ps = cell_paras(tc)
     if not ps:
         p = ET.SubElement(tc, W + 'p')
-        add_run_text(p, text)
+        add_run_text(p, text, ref_rPr or para_mark_rPr(p))
         return
     if para_text(ps[0]).strip():
         if not overwrite:
@@ -113,7 +142,7 @@ def set_cell_placeholder(tc, text, overwrite=False):
         for extra in ps[1:]:
             tc.remove(extra)
         return
-    add_run_text(ps[0], text)
+    add_run_text(ps[0], text, ref_rPr or cell_ref_rPr(tc))
 
 
 def load(path):
@@ -321,51 +350,50 @@ def find_row(tbl, *keys):
 
 
 def insert_cell(root, row_keys, col_index, ph, overwrite=False):
-    """定位含 row_keys 的行,向第 col_index(0起)个单元格插占位符;overwrite=True 覆盖既有提示/选项文字"""
+    """定位含 row_keys 的行,向第 col_index(0起)个单元格插占位符;overwrite=True 覆盖既有选项文字。
+    空格插入时格式参照=本行第一个有字 run(行内字体通常一致)"""
     for tbl in all_tables(root):
         tr = find_row(tbl, *row_keys)
         if tr is not None:
             cs = cells(tr)
-            set_cell_placeholder(cs[col_index], ph, overwrite)
+            ref = None
+            if not overwrite:
+                for tc in cs:
+                    r = first_text_run(tc)
+                    if r is not None and run_rPr(r) is not None:
+                        ref = run_rPr(r)
+                        break
+            set_cell_placeholder(cs[col_index], ph, overwrite, ref)
             return
     raise RuntimeError('未找到行: %s → 列%d 插 %s' % (row_keys, col_index, ph))
 
 
 def insert_cell_by_text(root, marker, ph):
-    """定位全文含 marker 的单元格,向首段插占位符(纯净版原因格/总结格:首段为空段,签字段在后)"""
+    """定位全文含 marker 的单元格,向首段插占位符(纯净版原因格/总结格:首段为空段,签字段在后);
+    格式参照=格内签字行 run(同格既有格式)"""
     for tc in root.iter(W + 'tc'):
         if marker in ''.join(t.text or '' for t in tc.iter(W + 't')):
-            set_cell_placeholder(tc, ph)
+            set_cell_placeholder(tc, ph, False, cell_ref_rPr(tc))
             return
     raise RuntimeError('未找到含 %s 的格子' % marker)
 
 
 def strip_trailing_empty_paras(root):
-    """删 body 末尾的拖尾空段(表后空段在 LibreOffice 下会顶出一张空白页;Word 里无视觉差异)"""
+    """body 末尾拖尾空段只保留 1 个(表格后必须有段落;多余空段在 LibreOffice 下顶出空白页)"""
     body = root.find(W + 'body')
     if body is None:
         return
+    kept = False
     for c in reversed(list(body)):
         if c.tag == W + 'sectPr':
             continue
         if c.tag == W + 'p' and not para_text(c).strip():
-            body.remove(c)
+            if kept:
+                body.remove(c)
+            else:
+                kept = True
         else:
             break
-
-
-def trim_cell_empties(root, marker, keep):
-    """定位全文含 marker 的单元格,空段只保留前 keep 个——报告正文格尾随空段收敛"""
-    for tc in root.iter(W + 'tc'):
-        if marker not in ''.join(t.text or '' for t in tc.iter(W + 't')):
-            continue
-        for p in list(tc.findall(W + 'p')):
-            if not para_text(p).strip():
-                if keep > 0:
-                    keep -= 1  # 前 keep 个空段保留(格内呼吸留白)
-                else:
-                    tc.remove(p)
-        return
 
 
 def insert_placeholder_after(root, marker, ph):
@@ -377,9 +405,10 @@ def insert_placeholder_after(root, marker, ph):
             continue
         for i, t in enumerate(texts):
             if marker in t:
+                ref = run_rPr(r0) if (r0 := first_text_run(ps[i])) is not None else para_mark_rPr(ps[i])
                 for q in ps[i + 1:]:
                     if not para_text(q).strip():
-                        add_run_text(q, ph)
+                        add_run_text(q, ph, ref)
                         return
                 raise RuntimeError('marker 后无空段可插: ' + marker)
     raise RuntimeError('未找到含 marker 的段落: ' + marker)
@@ -430,11 +459,16 @@ def make_register(root):
     # 简介/进度:纯净版已清示例,标签旁空值格直接插占位符
     insert_cell(root, ('项目简介',), 1, '{{projectSummary}}')
     insert_cell(root, ('项目计划进度',), 1, '{{progressPlan}}')
-    # 设备/管理费:标签+内联选项同段——保留标签,只把选项部分换成占位符(值=纯勾选串)
-    replace_first_match(root, contains_all('学校仪器设备'),
-                        '项目是否以使用学校仪器设备和场地为主：{{useSchoolAssetChecks}}', '设备场地勾选')
-    replace_first_match(root, contains_all('是否收取管理费'),
-                        '是否收取管理费：{{chargeMgmtFeeChecks}}', '管理费勾选')
+    # 设备/管理费:标签+内联选项同段——标签 run 保留,占位符写进选项 run(继承原格式)
+    for pred, ph, label in [
+            (contains_all('学校仪器设备'), '{{useSchoolAssetChecks}}', '设备场地勾选'),
+            (contains_all('是否收取管理费'), '{{chargeMgmtFeeChecks}}', '管理费勾选')]:
+        for p in all_paragraphs(root):
+            if pred(para_text(p)):
+                options_to_placeholder(p, ph)
+                break
+        else:
+            raise RuntimeError('未找到待替换段落: ' + label)
     replace_first_match(root, contains_all('收取管理费金额'), '收取管理费金额：{{mgmtFeeAmount}} 元', '管理费金额')
     replace_first_match(root, contains_all('立项登记日期'), '立项登记日期  {{hxRegisterDate}}', '登记日期')
 
@@ -539,14 +573,20 @@ def make_acceptance(root):
 def make_report(root):
     replace_first_match(root, contains_all('项目编号：'), '项目编号：{{approvalNo}}', '项目编号')
     replace_first_match(root, contains_all('项目名称：'), '项目名称：{{projectName}}', '项目名称')
-    replace_first_match(root, contains_all('是否按期完成'), '是否按期完成：{{onTimeChecks}}', '按期完成勾选')
-    replace_first_match(root, contains_all('项目类型：'), '项目类型：{{projectTypeChecks}}', '项目类型勾选')
-    replace_first_match(root, contains_all('成果形式（可多选）'), '成果形式（可多选）：{{outcomeFormChecks}}', '成果形式勾选')
-    # 正文:说明句后的第一个空段插入段落级区块对循环(poi-tl 区块对支持段落重复)
+    # 标签+选项同段:占位符写进选项 run(继承仿宋等原格式),标签 run 不动——避免合并后变成标签字体
+    for pred, ph, label in [
+            (contains_all('是否按期完成'), '{{onTimeChecks}}', '按期完成勾选'),
+            (contains_all('项目类型：'), '{{projectTypeChecks}}', '项目类型勾选'),
+            (contains_all('成果形式（可多选）'), '{{outcomeFormChecks}}', '成果形式勾选')]:
+        for p in all_paragraphs(root):
+            if pred(para_text(p)):
+                options_to_placeholder(p, ph)
+                break
+        else:
+            raise RuntimeError('未找到待替换段落: ' + label)
+    # 正文:说明句后的第一个空段插入段落级区块对循环(poi-tl 区块对支持段落重复;
+    # 格式克隆自说明句 run)。20 个尾随空段全数保留(保真:箱体高度由空段撑出)
     insert_placeholder_after(root, '页数不限', '{{?reportParagraphs}}{{this}}{{/reportParagraphs}}')
-    # 尾随空段收敛至 5:原 20 个空段在 LibreOffice 下会把签字行顶到第 2 页孤页
-    # (Word 里无此问题——行高 atLeast 4942 保箱体;此处只删空段,行高不动)
-    trim_cell_empties(root, '页数不限', 5)
 
 
 SRC_DIR = os.path.dirname(os.path.abspath(__file__))
