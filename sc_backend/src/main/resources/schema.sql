@@ -142,6 +142,8 @@ CREATE TABLE IF NOT EXISTS rp_hx_project (
   charge_mgmt_fee TINYINT COMMENT '是否收管理费0/1',
   mgmt_fee_amount DECIMAL(14,2) COMMENT '管理费金额(元)',
   leader_email VARCHAR(128) COMMENT '负责人邮箱',
+  project_summary TEXT COMMENT '项目简介(200-300字,登记表)',
+  progress_plan TEXT COMMENT '项目计划进度(200-300字,登记表)',
   hx_register_date DATE COMMENT '立项登记日期(科技处确认时写入)',
   verified_amount DECIMAL(14,2) COMMENT '核定到账金额(元,验收时定格)',
   create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
