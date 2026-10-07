@@ -823,8 +823,9 @@ public class HxService {
     }
 
     // ---------- 通用 ----------
-    /** 教师本人流程单(越权防线;消息文本区分 不存在/无权 语义,接口测试统一断言 code!=0) */
-    private RpHxFlow ownedFlow(Long uid, Long flowId) {
+    /** 教师本人流程单(越权防线;消息文本区分 不存在/无权 语义,接口测试统一断言 code!=0)
+     *  (包级:FundingService 合同附件上传复用,Task25) */
+    RpHxFlow ownedFlow(Long uid, Long flowId) {
         RpHxFlow flow = flowMapper.selectById(flowId);
         if (flow == null) {
             throw new BizException("流程单不存在");

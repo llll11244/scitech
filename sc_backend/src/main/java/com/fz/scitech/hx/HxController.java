@@ -34,10 +34,12 @@ import java.util.Map;
 public class HxController {
 
     private final HxService hxService;
+    private final FundingService fundingService;
     private final SysUserMapper userMapper;
 
-    public HxController(HxService hxService, SysUserMapper userMapper) {
+    public HxController(HxService hxService, FundingService fundingService, SysUserMapper userMapper) {
         this.hxService = hxService;
+        this.fundingService = fundingService;
         this.userMapper = userMapper;
     }
 
@@ -122,6 +124,24 @@ public class HxController {
     public Result<Long> scan(@PathVariable Long flowId, @RequestParam String docType,
                              @RequestParam MultipartFile file, HttpServletRequest request) {
         return Result.ok(hxService.uploadScan(uid(request), username(request), flowId, file, docType));
+    }
+
+    /**
+     * 合同扫描件上传(Task25,通用附件 ruling):biz_type=hx_apply,doc_type=合同;
+     * 本人流程单任何状态可传,同 docType 重传覆盖(旧件逻辑删),不触发状态迁移;
+     * 落盘 upload/hx/{pid}/apply/{flowId}/。
+     */
+    @PostMapping("/{flowId}/attach")
+    public Result<Long> attach(@PathVariable Long flowId,
+                               @RequestParam(defaultValue = "合同") String docType,
+                               @RequestParam MultipartFile file, HttpServletRequest request) {
+        return Result.ok(fundingService.uploadApply(uid(request), username(request), flowId, docType, file));
+    }
+
+    /** 到账明细只读(Task25,spec §6.1/§4.8):本人项目强制;明细+累计(科技处录入,教师只读) */
+    @GetMapping("/{projectId}/funding")
+    public Result<Map<String, Object>> funding(@PathVariable Long projectId, HttpServletRequest request) {
+        return Result.ok(fundingService.teacherFunding(uid(request), projectId));
     }
 
     /** 删草稿(仅 status=0;登记草稿连带逻辑删项目/成员/预算/附件;有到账禁删,决策#34) */
