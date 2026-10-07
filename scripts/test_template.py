@@ -55,11 +55,18 @@ def main():
     with open(SRC, "rb") as f:
         tpl_bytes = f.read()
 
-    # 1. 合法上传
+    # 1. 合法上传(幂等断言:版本递增且新版本启用;库里旧版本全部转历史)
+    before = requests.get(BASE + "/template/list", headers=headers,
+                          params={"tplType": "hx_register"}, timeout=10).json()
+    max_ver_before = max((v["version"] for v in (before.get("data") or [])), default=0)
     r = requests.post(BASE + "/template/upload", headers=headers,
                       data={"tplType": "hx_register"},
                       files={"file": ("hx_register.docx", tpl_bytes)}, timeout=180).json()
-    check("合法模板上传v1启用", r.get("code") == 0 and r["data"]["version"] == 1 and r["data"]["status"] == 1, str(r)[:120])
+    ok1 = r.get("code") == 0 and r["data"]["version"] == max_ver_before + 1 and r["data"]["status"] == 1
+    after = requests.get(BASE + "/template/list", headers=headers,
+                         params={"tplType": "hx_register"}, timeout=10).json()
+    ok2 = sum(1 for v in after["data"] if v["status"] == 1) == 1
+    check("合法模板上传新版本启用且旧版转历史", ok1 and ok2, str(r)[:80])
 
     # 2. 缺占位符(projectName→typo)
     bad = rewrites_docx(SRC, [("{{projectName}}", "{{projectNam}")])

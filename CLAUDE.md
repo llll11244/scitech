@@ -62,8 +62,20 @@ token 带 uid claim;AuthInterceptor 每请求按 uid 查库(停用立即 401、r
 - [x] N1-Task5 JWT 会话改造:JwtUtilTest 3/3 + scripts/test_auth.py 4/4 2026-10-07
 - [x] N1-Task6 前端骨架搬运(纵向页面全删,Login/Layout/Notify+角色守卫) 2026-10-07
 - [x] N1-Task7 验收:prod 环境变量启动零默认账号✅ 停用即失效✅ 锁定✅ 前端登录✅ 2026-10-07
-- [ ] N2 PDF 子系统(Task8-14):LibreOffice 便携版/RmbCapitalUtil/4 张模板/sys_template 接口/渲染管线/模板管理页/验收
-- [ ] N3 教师端三流程 / N4 科技处端 / N5 整体验收(依赖 N1/N2 实际形态另行编写计划)
+- [x] N2-Task8 LibreOffice 26.2.6.3 便携版(MSI 管理解包)+JODConverter 集成(PdfSmokeTest 过) 2026-10-07
+- [x] N2-Task9 RmbCapitalUtil 人民币大写(TDD 3/3) 2026-10-07
+- [x] N2-Task10 4张docx模板(占位符+版式压缩 2/2/2/1 页;RenderSmokeTest 4/4) 2026-10-07
+- [x] N2-Task11 模板管理接口(校验链:docx/占位符双向/试渲染/页数;test_template.py 5/5) 2026-10-07
+- [x] N2-Task12 PdfRenderService 渲染管线(render 落盘+renderPreview 分屏预览;RenderPipelineTest 5/5+test_render.py 8/8) 2026-10-07
+- [x] N2-Task13 模板管理前端页(上传/版本/预览弹窗 blob→iframe) 2026-10-07
+- [x] N2-Task14 验收:JUnit 16/16+脚本 13/13 全绿;部署包演练 716MB→8081 端口全通;**样例 PDF 人工核对待用户确认** 2026-10-07
+- [ ] N3 教师端三流程(rp_hx_* 实体/登记/变更/验收接口+分屏预览页) / N4 科技处端 / N5 整体验收(依赖 N1/N2 实际形态另行编写计划)
+
+## N2 关键交付物速查
+- 渲染管线:`PdfRenderService.render(RenderContext,model)→attachmentId`(落盘 upload/hx/{pid}/{ftype}/{fid}/);`renderPreview(tplType,model)→(pdf字节,页数)`(N3 分屏预览用,决策#36)
+- 模板:templates-src/hx_{register,change,acceptance,report}.docx + make_templates.py(从原始.doc重生成)+占位符清单.md;成员 m1-m6/m8、学生 s1-s4 固定行
+- 测试全绿口径:mvn test -Drender.smoke=true -Dpdf.smoke=true(16/16);scripts/test_auth.py(4)+test_template.py(5)+test_render.py(8)
+- 部署包=sc-backend.jar+libreoffice/(652MB 裁剪版)+upload/+backup/+mysqldump.exe ≈716MB,任意目录可起(相对路径cwd=包根)
 
 ## 约定
 - 所有回复、注释、文档中文;数据表 sys_/rp_ 前缀;仅按用户要求 commit(已授权逐 Task commit 模式)
