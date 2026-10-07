@@ -81,14 +81,15 @@ public class PdfRenderService {
                 }
                 String prefix = ctx.finalVersion() ? "final_" : "pending_";
                 String ts = LocalDateTime.now().format(TS);
-                docxDest = new File(dir, prefix + ts + ".docx");
+                // 文件名带 tplType 段:验收单同秒渲两张(hx_acceptance/hx_report)时防 REPLACE_EXISTING 互相覆盖
+                docxDest = new File(dir, prefix + ts + "_" + ctx.tplType() + ".docx");
                 Files.copy(tmpDocx, docxDest.toPath(), StandardCopyOption.REPLACE_EXISTING);
-                pdfDest = new File(dir, prefix + ts + ".pdf");
+                pdfDest = new File(dir, prefix + ts + "_" + ctx.tplType() + ".pdf");
                 Files.copy(r.pdf(), pdfDest.toPath(), StandardCopyOption.REPLACE_EXISTING);
 
                 // 附件登记(失败则删除已落盘文件,不留无主产物)
-                Long docxId = insertAttachment(ctx, docxDest, ctx.finalVersion() ? "hx_final_docx" : "hx_docx");
-                insertAttachment(ctx, pdfDest, ctx.finalVersion() ? "hx_final_pdf" : "hx_pdf");
+                Long docxId = insertAttachment(ctx, docxDest, stem(ctx, "docx"));
+                insertAttachment(ctx, pdfDest, stem(ctx, "pdf"));
                 log.info("渲染双出:{}/{} flow={}{} pages={} docx={} pdf={}", ctx.projectId(), ctx.flowType(),
                         ctx.flowId(), ctx.finalVersion() ? "(终版)" : "", r.pages(), docxDest.length(), pdfDest.length());
                 return docxId;
@@ -140,6 +141,17 @@ public class PdfRenderService {
         att.setUploaderId(ctx.operatorId());
         attachmentMapper.insert(att);
         return att.getId();
+    }
+
+    /**
+     * 附件 biz_type 按 tplType 推导(Task21 验收双单据):hx_report→hx_report_docx/hx_report_pdf
+     * (验收详情/下载按此区分两张),其余流程维持 hx_docx/hx_pdf;终版前缀 hx_final_ 不变。
+     */
+    private static String stem(RenderContext ctx, String ext) {
+        if (ctx.finalVersion()) {
+            return "hx_final_" + ext;
+        }
+        return ("hx_report".equals(ctx.tplType()) ? "hx_report_" : "hx_") + ext;
     }
 
     /** 预览渲染(决策#36):字节流返回,不落盘不登记;页数超限不抛错(预览如实反映,由前端提示) */

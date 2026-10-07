@@ -141,13 +141,22 @@ class RenderPipelineTest {
                 88L, 1L, "change", "hx_change", 7L, "tester", false);
         Long docxId = svc.render(ctx, SampleData.forType("hx_change"));
         assertEquals(9L, docxId, "应返回 docx 主交付附件 id");
-        org.mockito.Mockito.verify(stubMapper, org.mockito.Mockito.times(2)).insert(
-                org.mockito.ArgumentMatchers.any(com.fz.scitech.platform.attachment.RpAttachment.class));
+        org.mockito.ArgumentCaptor<com.fz.scitech.platform.attachment.RpAttachment> cap =
+                org.mockito.ArgumentCaptor.forClass(com.fz.scitech.platform.attachment.RpAttachment.class);
+        org.mockito.Mockito.verify(stubMapper, org.mockito.Mockito.times(2)).insert(cap.capture());
+        // Task21 stem 推导:非 hx_report 流程维持 hx_docx/hx_pdf(finalVersion 前缀 hx_final_ 另论)
+        assertEquals(java.util.List.of("hx_docx", "hx_pdf"),
+                cap.getAllValues().stream().map(com.fz.scitech.platform.attachment.RpAttachment::getBizType)
+                        .sorted().collect(java.util.stream.Collectors.toList()),
+                "biz_type 应按 stem(ctx,ext) 推导");
         File dir = new File("target/test-upload/hx/1/change/88");
         String[] docx = dir.list((d, n) -> n.startsWith("pending_") && n.endsWith(".docx"));
         String[] pdf = dir.list((d, n) -> n.startsWith("pending_") && n.endsWith(".pdf"));
         assertTrue(docx != null && docx.length == 1, "应落盘 1 个 pending_*.docx");
         assertTrue(pdf != null && pdf.length == 1, "应落盘 1 个 pending_*.pdf(隐藏副产物)");
+        // Task21 文件名 tplType 段:同流程同秒多模板渲染防互相覆盖
+        assertTrue(docx[0].endsWith("_hx_change.docx") && pdf[0].endsWith("_hx_change.pdf"),
+                "文件名应含 tplType 段:" + docx[0] + "/" + pdf[0]);
     }
 
     @Test

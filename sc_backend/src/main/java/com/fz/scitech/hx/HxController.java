@@ -1,6 +1,8 @@
 package com.fz.scitech.hx;
 
 import com.fz.scitech.common.Result;
+import com.fz.scitech.hx.dto.AcceptanceSaveDTO;
+import com.fz.scitech.hx.dto.ChangeSaveDTO;
 import com.fz.scitech.hx.dto.FlowDetailVO;
 import com.fz.scitech.hx.dto.RegisterSaveDTO;
 import jakarta.servlet.http.HttpServletRequest;
@@ -45,6 +47,32 @@ public class HxController {
         return Result.ok(null);
     }
 
+    /** 变更草稿保存(flowId 空=新建;draft 不校验项目确认态,提交才强校验 audit_status=2) */
+    @PostMapping("/change/draft")
+    public Result<Long> changeDraft(@RequestBody ChangeSaveDTO dto, HttpServletRequest request) {
+        return Result.ok(hxService.saveChangeDraft(uid(request), username(request), dto));
+    }
+
+    /** 变更提交(0→1,拍 before_json 快照+渲 hx_change 待签双出) */
+    @PostMapping("/change/submit")
+    public Result<Void> changeSubmit(@RequestBody Map<String, Long> body, HttpServletRequest request) {
+        hxService.submitChange(uid(request), username(request), body.get("flowId"));
+        return Result.ok(null);
+    }
+
+    /** 验收草稿保存(每项目至多 1 张;成员全量覆盖补 ratio/amount/学号/导师) */
+    @PostMapping("/acceptance/draft")
+    public Result<Long> acceptanceDraft(@RequestBody AcceptanceSaveDTO dto, HttpServletRequest request) {
+        return Result.ok(hxService.saveAcceptanceDraft(uid(request), username(request), dto));
+    }
+
+    /** 验收提交(0→1,渲两张待签:hx_acceptance+hx_report,双出×2=4 附件) */
+    @PostMapping("/acceptance/submit")
+    public Result<Void> acceptanceSubmit(@RequestBody Map<String, Long> body, HttpServletRequest request) {
+        hxService.submitAcceptance(uid(request), username(request), body.get("flowId"));
+        return Result.ok(null);
+    }
+
     @PostMapping("/{flowId}/withdraw")
     public Result<Void> withdraw(@PathVariable Long flowId, HttpServletRequest request) {
         hxService.withdraw(uid(request), username(request), flowId);
@@ -75,14 +103,15 @@ public class HxController {
         return Result.ok(hxService.flowDetail(uid(request), role(request), flowId));
     }
 
-    /** 填报分屏预览:flowType+表单数据→docx 字节流(不入库不落盘,决策#36+直出Word) */
+    /** 填报分屏预览:flowType+表单数据→docx 字节流(不入库不落盘,决策#36+直出Word);tplType=验收流程双模板切换 */
     @PostMapping("/preview")
     public void preview(@RequestBody Map<String, Object> body, HttpServletRequest request,
                         HttpServletResponse response) throws IOException {
         String flowType = (String) body.get("flowType");
+        String tplType = (String) body.get("tplType");
         @SuppressWarnings("unchecked")
         Map<String, Object> data = (Map<String, Object>) body.get("data");
-        byte[] docx = hxService.previewDocx(flowType, data, uid(request));
+        byte[] docx = hxService.previewDocx(flowType, tplType, data, uid(request));
         response.setContentType("application/vnd.openxmlformats-officedocument.wordprocessingml.document");
         response.setContentLength(docx.length);
         response.getOutputStream().write(docx);
