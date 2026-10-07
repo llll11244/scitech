@@ -28,6 +28,7 @@ class RenderPipelineTest {
     private static LocalOfficeManager manager;
     private static PdfRenderService renderService;
     private static TemplateService templateService;
+    private static PdfConverter converter;
 
     @BeforeAll
     static void setUp() {
@@ -44,7 +45,7 @@ class RenderPipelineTest {
         }
         OfficeManagerConfig cfg = new OfficeManagerConfig();
         cfg.inject(manager);
-        PdfConverter converter = new PdfConverter(cfg);
+        converter = new PdfConverter(cfg);
         templateService = new TemplateService(null, converter, "target/test-upload");
         renderService = new PdfRenderService(templateService, converter, null, "target/test-upload");
     }
@@ -98,6 +99,48 @@ class RenderPipelineTest {
         } finally {
             Files.deleteIfExists(bad);
         }
+    }
+
+    @Test
+    void renderDualOutputDocxMainAndPdfHidden() throws Exception {
+        // 直出 Word 决策(2026-10-07):render() 双出——docx 主交付(hx_docx) + PDF 副产物(hx_pdf),
+        // 返回 docx 附件 id;模板/附件 mapper 均 Mockito 桩
+        Files.createDirectories(Path.of("target/test-upload"));
+        Files.copy(Path.of("../templates-src/hx_change.docx"),
+                Path.of("target/test-upload/test-tpl.docx"), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        com.fz.scitech.platform.template.mapper.SysTemplateMapper tplMapper =
+                org.mockito.Mockito.mock(com.fz.scitech.platform.template.mapper.SysTemplateMapper.class);
+        org.mockito.Mockito.when(tplMapper.selectOne(org.mockito.ArgumentMatchers.any()))
+                .thenAnswer(inv -> {
+                    com.fz.scitech.platform.template.entity.SysTemplate t =
+                            new com.fz.scitech.platform.template.entity.SysTemplate();
+                    t.setId(1L);
+                    t.setTplType("hx_change");
+                    t.setFilePath("test-tpl.docx");
+                    t.setStatus(1);
+                    return t;
+                });
+        com.fz.scitech.platform.attachment.mapper.RpAttachmentMapper stubMapper =
+                org.mockito.Mockito.mock(com.fz.scitech.platform.attachment.mapper.RpAttachmentMapper.class);
+        org.mockito.Mockito.when(stubMapper.insert(org.mockito.ArgumentMatchers.any(
+                        com.fz.scitech.platform.attachment.RpAttachment.class)))
+                .thenAnswer(inv -> {
+                    inv.getArgument(0, com.fz.scitech.platform.attachment.RpAttachment.class).setId(9L);
+                    return 1;
+                });
+        TemplateService svcTpl = new TemplateService(tplMapper, converter, "target/test-upload");
+        PdfRenderService svc = new PdfRenderService(svcTpl, converter, stubMapper, "target/test-upload");
+        com.fz.scitech.platform.template.dto.RenderContext ctx = new com.fz.scitech.platform.template.dto.RenderContext(
+                88L, 1L, "change", "hx_change", 7L, "tester", false);
+        Long docxId = svc.render(ctx, SampleData.forType("hx_change"));
+        assertEquals(9L, docxId, "应返回 docx 主交付附件 id");
+        org.mockito.Mockito.verify(stubMapper, org.mockito.Mockito.times(2)).insert(
+                org.mockito.ArgumentMatchers.any(com.fz.scitech.platform.attachment.RpAttachment.class));
+        File dir = new File("target/test-upload/hx/1/change/88");
+        String[] docx = dir.list((d, n) -> n.startsWith("pending_") && n.endsWith(".docx"));
+        String[] pdf = dir.list((d, n) -> n.startsWith("pending_") && n.endsWith(".pdf"));
+        assertTrue(docx != null && docx.length == 1, "应落盘 1 个 pending_*.docx");
+        assertTrue(pdf != null && pdf.length == 1, "应落盘 1 个 pending_*.pdf(隐藏副产物)");
     }
 
     /** 复制 hx_change.docx 并破坏 document.xml(删首个表格闭合标签) */

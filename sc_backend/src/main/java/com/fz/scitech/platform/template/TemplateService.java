@@ -192,11 +192,35 @@ public class TemplateService {
 
     /** poi-tl 渲染到目标 docx(样例数据) */
     public void renderDocx(String tplType, File templateFile, File outDocx) throws Exception {
-        Map<String, Object> data = SampleData.forType(tplType);
+        renderDocx(tplType, templateFile, outDocx, SampleData.forType(tplType));
+    }
+
+    /** poi-tl 渲染到目标 docx(显式数据模型;N3 RenderModelBuilder 组装后走此口径) */
+    public void renderDocx(String tplType, File templateFile, File outDocx, Map<String, Object> data) throws Exception {
         try (FileInputStream in = new FileInputStream(templateFile);
              java.io.FileOutputStream out = new java.io.FileOutputStream(outDocx)) {
             XWPFTemplate template = XWPFTemplate.compile(in).render(data);
             template.writeAndClose(out);
+        }
+    }
+
+    /** 样例数据 docx 直出字节(预览接口用,不转 PDF)——当前启用版 */
+    public byte[] renderSampleDocx(String tplType) {
+        SysTemplate t = enabled(tplType);
+        if (t == null) {
+            throw new BizException("该类型暂无启用版模板,请先上传");
+        }
+        Path tmpDocx = null;
+        try {
+            tmpDocx = Files.createTempFile("tpl-preview-", ".docx");
+            renderDocx(t.getTplType(), templateFile(t), tmpDocx.toFile());
+            return Files.readAllBytes(tmpDocx);
+        } catch (BizException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new BizException("样例渲染失败:" + e.getMessage());
+        } finally {
+            cleanup(tmpDocx);
         }
     }
 

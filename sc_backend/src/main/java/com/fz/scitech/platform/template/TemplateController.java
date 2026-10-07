@@ -87,6 +87,19 @@ public class TemplateController {
         response.getOutputStream().write(pdf);
     }
 
+    /** 当前启用版样例 docx 直出预览(2026-10-07 直出 Word 决策:N3 填报分屏预览同口径,
+     *  前端 docx-preview 渲染,版式以老师下载打印的 Word 文件为准) */
+    @GetMapping("/preview-docx")
+    public void previewDocx(@RequestParam String tplType, HttpServletRequest request,
+                            HttpServletResponse response) throws IOException {
+        requireAdmin(request);
+        byte[] docx = templateService.renderSampleDocx(tplType);
+        response.setContentType("application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+        response.setContentLength(docx.length);
+        response.setHeader("Content-Disposition", "inline; filename=" + tplType + "_preview.docx");
+        response.getOutputStream().write(docx);
+    }
+
     private byte[] renderPdfByVersion(SysTemplate t) {
         return templateService.renderSamplePdfOf(t);
     }

@@ -55,51 +55,91 @@ public class PdfRenderService {
     }
 
     /**
-     * 正式渲染并落盘登记(待签 hx_pdf / 终版 hx_final),返回附件 id。
-     * 旧版本 PDF 由调用方标记作废(biz_type 语义:hx_pdf 含作废版本,保留文件不入列表)。
+     * 正式渲染双出落盘登记(2026-10-07"直出 Word"决策):
+     * docx=主交付(老师用 Word 打印,版式与模板零差异) + PDF=副产物隐藏留存
+     * (LibreOffice 口径,前端显隐由 sys_config.deliver_pdf_visible 开关控制,双出不受开关影响)。
+     * 返回 docx 附件 id。旧版本由调用方标记作废(biz_type 含作废版本,保留文件不入列表)。
      */
     public Long render(RenderContext ctx, java.util.Map<String, Object> model) {
         SysTemplate tpl = templateService.enabled(ctx.tplType());
         if (tpl == null) {
             throw new BizException("模板类型 " + ctx.tplType() + " 暂无启用版,请联系管理员上传");
         }
-        Path tmp = null;
-        File dest = null;
+        Path tmpDocx = null;
+        File docxDest = null;
+        File pdfDest = null;
         try {
-            tmp = renderToTemp(ctx.tplType(), templateService.templateFile(tpl), model,
-                    ctx.flowType() + "-" + ctx.flowId(), ctx.operatorName()).pdf();
+            tmpDocx = Files.createTempFile("render-", ".docx");
+            templateService.renderDocx(ctx.tplType(), templateService.templateFile(tpl), tmpDocx.toFile(), model);
+            TempRender r = pdfFromDocx(tmpDocx, TemplatePlaceholders.maxPages(ctx.tplType()),
+                    ctx.flowType() + "-" + ctx.flowId(), ctx.operatorName());
+            try {
+                // 双出落盘 upload/hx/{projectId}/{flowType}/{flowId}/
+                File dir = new File(uploadDir, "hx/" + ctx.projectId() + "/" + ctx.flowType() + "/" + ctx.flowId());
+                if (!dir.exists() && !dir.mkdirs()) {
+                    throw new BizException("渲染目录创建失败:" + dir);
+                }
+                String prefix = ctx.finalVersion() ? "final_" : "pending_";
+                String ts = LocalDateTime.now().format(TS);
+                docxDest = new File(dir, prefix + ts + ".docx");
+                Files.copy(tmpDocx, docxDest.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                pdfDest = new File(dir, prefix + ts + ".pdf");
+                Files.copy(r.pdf(), pdfDest.toPath(), StandardCopyOption.REPLACE_EXISTING);
 
-            // 落盘 upload/hx/{projectId}/{flowType}/{flowId}/
-            File dir = new File(uploadDir, "hx/" + ctx.projectId() + "/" + ctx.flowType() + "/" + ctx.flowId());
-            if (!dir.exists() && !dir.mkdirs()) {
-                throw new BizException("渲染目录创建失败:" + dir);
+                // 附件登记(失败则删除已落盘文件,不留无主产物)
+                Long docxId = insertAttachment(ctx, docxDest, ctx.finalVersion() ? "hx_final_docx" : "hx_docx");
+                insertAttachment(ctx, pdfDest, ctx.finalVersion() ? "hx_final_pdf" : "hx_pdf");
+                log.info("渲染双出:{}/{} flow={}{} pages={} docx={} pdf={}", ctx.projectId(), ctx.flowType(),
+                        ctx.flowId(), ctx.finalVersion() ? "(终版)" : "", r.pages(), docxDest.length(), pdfDest.length());
+                return docxId;
+            } finally {
+                cleanupQuietly(r.pdf().toFile());
             }
-            String prefix = ctx.finalVersion() ? "final_" : "pending_";
-            dest = new File(dir, prefix + LocalDateTime.now().format(TS) + ".pdf");
-            Files.copy(tmp, dest.toPath(), StandardCopyOption.REPLACE_EXISTING);
-
-            // 附件登记(失败则删除已落盘文件,不留无主产物)
-            RpAttachment att = new RpAttachment();
-            att.setProjectId(ctx.projectId());
-            att.setBizType(ctx.finalVersion() ? "hx_final" : "hx_pdf");
-            att.setFileName(dest.getName());
-            att.setFilePath(toRelative(dest));
-            att.setFileSize(dest.length());
-            att.setUploaderId(ctx.operatorId());
-            attachmentMapper.insert(att);
-            log.info("PDF渲染落盘:{}/{} flow={}{} pages={} bytes={}", ctx.projectId(), ctx.flowType(),
-                    ctx.flowId(), ctx.finalVersion() ? "(终版)" : "", countPages(dest.toPath()), dest.length());
-            return att.getId();
         } catch (BizException e) {
-            cleanupQuietly(dest);
+            cleanupQuietly(docxDest);
+            cleanupQuietly(pdfDest);
             throw e;
         } catch (Exception e) {
-            log.error("PDF渲染失败 flowId={}", ctx.flowId(), e);
-            cleanupQuietly(dest);
-            throw new BizException("PDF 生成失败:" + e.getMessage());
+            log.error("渲染失败 flowId={}", ctx.flowId(), e);
+            cleanupQuietly(docxDest);
+            cleanupQuietly(pdfDest);
+            throw new BizException("渲染失败:" + e.getMessage());
+        } finally {
+            cleanupQuietly(tmpDocx == null ? null : tmpDocx.toFile());
+        }
+    }
+
+    /** docx 直出预览流(N3 填报分屏预览,前端 docx-preview 渲染):纯 poi-tl 填充,不转换不落盘 */
+    public byte[] renderDocxStream(String tplType, java.util.Map<String, Object> model) {
+        SysTemplate tpl = templateService.enabled(tplType);
+        if (tpl == null) {
+            throw new BizException("模板类型 " + tplType + " 暂无启用版,请联系管理员上传");
+        }
+        Path tmp = null;
+        try {
+            tmp = Files.createTempFile("render-", ".docx");
+            templateService.renderDocx(tplType, templateService.templateFile(tpl), tmp.toFile(), model);
+            return Files.readAllBytes(tmp);
+        } catch (BizException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("docx 渲染失败 {}", tplType, e);
+            throw new BizException("docx 渲染失败:" + e.getMessage());
         } finally {
             cleanupQuietly(tmp == null ? null : tmp.toFile());
         }
+    }
+
+    private Long insertAttachment(RenderContext ctx, File f, String bizType) {
+        RpAttachment att = new RpAttachment();
+        att.setProjectId(ctx.projectId());
+        att.setBizType(bizType);
+        att.setFileName(f.getName());
+        att.setFilePath(toRelative(f));
+        att.setFileSize(f.length());
+        att.setUploaderId(ctx.operatorId());
+        attachmentMapper.insert(att);
+        return att.getId();
     }
 
     /** 预览渲染(决策#36):字节流返回,不落盘不登记;页数超限不抛错(预览如实反映,由前端提示) */
@@ -131,18 +171,26 @@ public class PdfRenderService {
     TempRender renderToTemp(String tplType, File templateFile, java.util.Map<String, Object> model,
                             String title, String author) throws Exception {
         Path tmpDocx = null;
+        try {
+            tmpDocx = Files.createTempFile("render-", ".docx");
+            templateService.renderDocx(tplType, templateFile, tmpDocx.toFile(), model);
+            return pdfFromDocx(tmpDocx, TemplatePlaceholders.maxPages(tplType), title, author);
+        } finally {
+            cleanupQuietly(tmpDocx == null ? null : tmpDocx.toFile());
+        }
+    }
+
+    /** 填充后的 docx→PDF(转换+页数校验+元数据),全在临时文件完成;页数超上限抛 BizException */
+    private TempRender pdfFromDocx(Path tmpDocx, int maxPages, String title, String author) throws Exception {
         Path tmpPdf = null;
         Path metaPdf = null;
         try {
-            tmpDocx = Files.createTempFile("render-", ".docx");
             tmpPdf = Files.createTempFile("render-", ".pdf");
-            templateService.renderDocx(tplType, templateFile, tmpDocx.toFile());
             pdfConverter.toPdf(tmpDocx.toFile(), tmpPdf.toFile());
 
             int pages = countPages(tmpPdf);
-            int max = TemplatePlaceholders.maxPages(tplType);
-            if (pages > max) {
-                throw new BizException("渲染结果 " + pages + " 页,超过上限 " + max + " 页(模板版式或内容超长)");
+            if (pages > maxPages) {
+                throw new BizException("渲染结果 " + pages + " 页,超过上限 " + maxPages + " 页(模板版式或内容超长)");
             }
             // PDF 元数据:生成时间/流程单号/操作人(决策#10)
             metaPdf = Files.createTempFile("render-", ".pdf");
@@ -156,7 +204,6 @@ public class PdfRenderService {
             }
             return new TempRender(metaPdf, pages);
         } finally {
-            cleanupQuietly(tmpDocx == null ? null : tmpDocx.toFile());
             cleanupQuietly(tmpPdf == null ? null : tmpPdf.toFile());
         }
     }
