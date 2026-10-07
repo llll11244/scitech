@@ -236,10 +236,10 @@ const deliverDocs = computed(() => {
 const fmtMoney = (v) => (v === null || v === undefined ? '—' : Number(v).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
 const fmtTime = (t) => (t || '').replace('T', ' ').slice(0, 16)
 
-/** 退回态:最近一条退回留痕意见(records 已倒序=最新在前,醒目提示用) */
+/** 退回态:最近一条退回留痕意见(d.records 为 orderByAsc(id) 最旧在前,取末元素=最新一次退回) */
 const rejectOpinion = computed(() => {
   const rs = (d.value?.records || []).filter((r) => r.action === 'reject' || r.action === 'precheck_reject')
-  const last = rs[0]
+  const last = rs[rs.length - 1]
   if (!last) return null
   return { opinion: last.opinion || '', actionLabel: ACTION_LABEL[last.action] || '退回' }
 })

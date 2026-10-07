@@ -1,7 +1,11 @@
 -- =============================================================
--- 字典初值(spring.sql.init 每次启动执行,幂等:按 dict_type 先删后插,
--- id 手工固定编号;全部 is_system=1 可停用不可改名删除)
--- 横向无申报窗口配置(决策#34-①);sys_config 仅插值型展示配置:
+-- 字典初值(spring.sql.init 每次启动执行,幂等口径=「首启种子、此后不碰」:
+-- 固定 id INSERT IGNORE——已存在(含管理页停用/调序/改名后)的行完全不动,
+-- 仅首启或代码新增种子行时入库;**不做 DELETE 重置**,否则 Task26 字典管理的
+-- 停用/调序/自建取值每次重启即丢。id 手工固定编号;种子全部 is_system=1
+-- 可停用不可改名删除。升级新增种子行靠 IGNORE 冲突跳过自然补插)
+-- 横向无申报窗口配置(决策#34-①);sys_config 仅插值型展示配置(代码所有,
+-- 管理页不可改,先删后插重置无害):
 -- deliver_pdf_visible=待签文件 PDF 入口显隐(2026-10-07 直出 Word 决策,
 -- false=页面仅显示 Word 交付;docx+PDF 双出落盘不受开关影响)
 -- =============================================================
@@ -12,12 +16,7 @@ INSERT INTO sys_config (config_key, config_value, remark) VALUES
 ('deliver_pdf_visible', 'false', '待签文件PDF入口显隐:false=隐藏,页面仅显示Word交付');
 
 
-DELETE FROM sys_dict WHERE dict_type IN (
-  'hx_project_type', 'client_nature', 'hx_outcome_form', 'change_type',
-  'budget_subject_hx', 'member_type', 'hx_scan_doc_type'
-);
-
-INSERT INTO sys_dict (id, dict_type, dict_value, dict_label, is_system, sort_order, status, create_by) VALUES
+INSERT IGNORE INTO sys_dict (id, dict_type, dict_value, dict_label, is_system, sort_order, status, create_by) VALUES
 -- 横向项目类型(模板联动:登记表/变更表/验收表勾选组)
 (1001, 'hx_project_type', '技术开发', '技术开发', 1, 1, 1, 'system'),
 (1002, 'hx_project_type', '技术咨询', '技术咨询', 1, 2, 1, 'system'),

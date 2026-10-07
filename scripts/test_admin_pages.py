@@ -231,8 +231,8 @@ def main():
           and row3 is not None and row3.get("lastLogin"), str(row3)[:140])
     # 停用:登录拒 + 既有 token 立即 401(AuthInterceptor 停用即失效)
     check("停用 ok", put("/users/%s/status" % uid_new, admin, {"status": 0}).get("code") == 0, "")
-    check("停用后登录拒", post("/auth/login", {"username": "t26user", "password": "Abcd1234"},
-          {"Authorization": ""}).get("code") != 0, "")
+    check("停用后登录拒", post("/auth/login", {"Authorization": ""},
+          {"username": "t26user", "password": "Abcd1234"}).get("code") != 0, "")
     check("停用后既有 token 失效", get("/users/me", t3).get("code") != 0, "")
     check("不可自停", put("/users/1/status", admin, {"status": 0}).get("code") != 0, "")
     check("重新启用 ok", put("/users/%s/status" % uid_new, admin, {"status": 1}).get("code") == 0, "")
