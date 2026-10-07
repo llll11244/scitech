@@ -167,7 +167,8 @@ public final class SampleData {
         paragraphs.add("【样例】核心技术成果:智能排产算法一套、集控平台一套;受理发明专利1项。");
         paragraphs.add("四、总结与展望");
         paragraphs.add("【样例】项目全面完成合同任务,建议后续在能耗优化方向继续合作。");
-        m.put("reportParagraphs", paragraphs);
+        // 区块对 {{this}} 同 RenderModelBuilder:List<String> 元素不渲染,每段包为 {"this": 段文本}
+        m.put("reportParagraphs", paragraphs.stream().map(p -> Map.of("this", (Object) p)).toList());
         return m;
     }
 }
