@@ -141,6 +141,7 @@ public class HxService {
             if (flow.getStatus() != HxFlowStatus.DRAFT) {
                 throw new BizException("仅草稿可编辑");
             }
+            guardDraft(flow.getId(), "仅草稿可编辑");   // 条件占位防并发提交竞态(决策#34-②)
             flowId = flow.getId();
             project = projectMapper.selectById(flow.getProjectId());
             project.setName(dto.getName());
@@ -242,9 +243,9 @@ public class HxService {
     }
 
     // ---------- 撤回(三流程共用) ----------
-    /** 已提交(1)→草稿(0);已回扫(2)→已提交(1,重传前须先撤回重盖章场景) */
+    /** 已提交(1)→草稿(0);已回扫(2)→已提交(1,重传前须先撤回重盖章场景)。留痕=ACT_WITHDRAW 入时间线 */
     @Transactional
-    public void withdraw(Long uid, Long flowId) {
+    public void withdraw(Long uid, String username, Long flowId) {
         RpHxFlow flow = ownedFlow(uid, flowId);
         if (flow.getStatus() == HxFlowStatus.SUBMITTED) {
             transit(flowId, HxFlowStatus.SUBMITTED, HxFlowStatus.DRAFT);
@@ -253,6 +254,7 @@ public class HxService {
         } else {
             throw new BizException("当前状态不可撤回");
         }
+        saveRecord(flow, HxFlowStatus.ACT_WITHDRAW, username, uid, null);
     }
 
     // ---------- 回扫 ----------
@@ -333,6 +335,7 @@ public class HxService {
         if (flow.getStatus() != HxFlowStatus.DRAFT) {
             throw new BizException("仅草稿可删除");
         }
+        guardDraft(flowId, "仅草稿可删除");   // 条件占位防并发提交竞态(决策#34-②)
         if ("register".equals(flow.getFlowType())) {
             Long projectId = flow.getProjectId();
             if (fundingMapper.selectCount(new LambdaQueryWrapper<RpFundingRecord>()
@@ -499,16 +502,16 @@ public class HxService {
         return flow;
     }
 
-    /** 教师=ownedFlow 防线;admin/viewer 直查(只读角色按平台口径放行查看) */
+    /** 访问防线(spec §6.4):教师一律 owner 校验(ownedFlow);admin 直查;viewer 不参与横向,按 owner 判定必拒 */
     private RpHxFlow accessibleFlow(Long uid, String role, Long flowId) {
-        if ("teacher".equals(role)) {
-            return ownedFlow(uid, flowId);
+        if ("admin".equals(role)) {
+            RpHxFlow flow = flowMapper.selectById(flowId);
+            if (flow == null) {
+                throw new BizException("流程单不存在");
+            }
+            return flow;
         }
-        RpHxFlow flow = flowMapper.selectById(flowId);
-        if (flow == null) {
-            throw new BizException("流程单不存在");
-        }
-        return flow;
+        return ownedFlow(uid, flowId);   // teacher/viewer 同走归属判定,viewer 名下无项目即"无权访问"
     }
 
     /** 条件更新迁移(决策#34-②):影响 0 行=状态已被并发改动,抛错回滚 */
@@ -518,6 +521,22 @@ public class HxService {
                 .set(RpHxFlow::getStatus, to));
         if (rows == 0) {
             throw new BizException("状态已变化,请刷新后重试");
+        }
+    }
+
+    /**
+     * 草稿态条件占位校验(决策#34-②,check-then-act 竞态封口):
+     * 编辑/删除在 ownedFlow 读到 status=0 后、任何写之前,先按 status=0 条件更新占位,
+     * 并发提交(transit 0→1)抢先则此处 0 行即拒。SET 同值(update_time)仍计 matched 行——
+     * 依赖 Connector/J 默认 useAffectedRows=false 返回 matched 行数而非 affected,
+     * 条件不匹配必返回 0(连接串未带 useAffectedRows=true,勿加,加了同值 SET 会误判 0)。
+     */
+    private void guardDraft(Long flowId, String rejectMsg) {
+        int rows = flowMapper.update(null, new LambdaUpdateWrapper<RpHxFlow>()
+                .eq(RpHxFlow::getId, flowId).eq(RpHxFlow::getStatus, HxFlowStatus.DRAFT)
+                .set(RpHxFlow::getUpdateTime, LocalDateTime.now()));
+        if (rows == 0) {
+            throw new BizException(rejectMsg);
         }
     }
 

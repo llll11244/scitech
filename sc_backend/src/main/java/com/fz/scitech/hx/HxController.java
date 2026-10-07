@@ -47,7 +47,7 @@ public class HxController {
 
     @PostMapping("/{flowId}/withdraw")
     public Result<Void> withdraw(@PathVariable Long flowId, HttpServletRequest request) {
-        hxService.withdraw(uid(request), flowId);
+        hxService.withdraw(uid(request), username(request), flowId);
         return Result.ok(null);
     }
 

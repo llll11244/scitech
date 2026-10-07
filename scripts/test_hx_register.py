@@ -78,9 +78,9 @@ def main():
     check("重传覆盖旧件作废", r2.get("code") == 0 and d["flow"]["status"] == 2 and len(scans) == 1,
           "生效扫描件=%d" % len(scans))
 
-    # 7. 时间线含 submit/upload_scan 动作
+    # 7. 时间线含 submit/withdraw/upload_scan 动作(撤回留痕=ACT_WITHDRAW)
     acts = [x["action"] for x in d["records"]]
-    check("时间线动作", "submit" in acts and "upload_scan" in acts, str(acts))
+    check("时间线动作", "submit" in acts and "upload_scan" in acts and "withdraw" in acts, str(acts))
 
     # 8. 越权与状态防御(teacher2 为 DataInitializer 新增种子)
     r = requests.get(BASE + "/hx/%d" % (fid + 99999), headers=t)
