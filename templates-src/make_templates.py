@@ -122,57 +122,57 @@ def load(path):
 
 
 def save(root, out, src, mode='tight'):
-    """版式处理分档:
-    tight=极限压缩(登记/验收:2 页硬约束,空段每格≤2+行高>800 钳 800);
-    mid=中度(变更表:空段每格≤1+行高>1000 钳 1000,压掉溢出即可,保住整页饱满);
-    light=轻(报告:单页大正文格,仅边距/表宽/段距清零,保留自然留白撑满页面)。"""
-    # ①页边距 1800→900/上下 600 ②表格 100% 自适应(两种档位都做)
-    for mg in root.iter(W + 'pgMar'):
-        mg.set(W + 'left', '900')
-        mg.set(W + 'right', '900')
-        if int(mg.get(W + 'top', '1440')) > 600:
-            mg.set(W + 'top', '600')
-        if int(mg.get(W + 'bottom', '1440')) > 600:
-            mg.set(W + 'bottom', '600')
-    for tbl in root.iter(W + 'tbl'):
-        tblPr = tbl.find(W + 'tblPr')
-        if tblPr is not None:
-            tw = tblPr.find(W + 'tblW')
-            if tw is not None:
-                tw.set(W + 'w', '5000')
-                tw.set(W + 'type', 'pct')
-            layout = tblPr.find(W + 'tblLayout')
-            if layout is None:
-                layout = ET.SubElement(tblPr, W + 'tblLayout')
-            layout.set(W + 'type', 'autofit')
-        for tc in tbl.iter(W + 'tc'):
-            ps = tc.findall(W + 'p')
-            texts = [para_text(p).strip() for p in ps]
-            if not any(texts):
-                # 全空格子:只留一段(多余空段占行高)
-                for extra in ps[1:]:
-                    tc.remove(extra)
-            elif mode != 'light':
-                # tight:非空格空段每格至多留 2;mid:至多留 1(压掉溢出行即可)
-                keep = 2 if mode == 'tight' else 1
-                empty_idx = [i for i, x in enumerate(texts) if not x]
-                for i in empty_idx[keep:]:
-                    tc.remove(ps[i])
-        # 表内段落间距清零(段前后 0、行距单倍)——Word 表格默认间距在 LibreOffice 下更占高
-        for p in tbl.iter(W + 'p'):
-            pPr = p.find(W + 'pPr')
-            if pPr is None:
-                continue
-            sp = pPr.find(W + 'spacing')
-            if sp is not None:
-                sp.set(W + 'before', '0')
-                sp.set(W + 'after', '0')
-                if sp.get(W + 'line'):
-                    sp.set(W + 'line', '240')
-                    sp.set(W + 'lineRule', 'auto')
-    if mode != 'light':
-        # 行高钳制:tight>800→800 / mid>1000→1000;简介/进度标记行豁免(保持 2000 供内容展开)
-        cap = 800 if mode == 'tight' else 1000
+    """版式处理分档(三轮迭代定稿,原则:能不动就不动,书写区绝不钳平):
+    tight=极限压缩(登记/验收表:2 页硬约束)——边距 900/900/600/600+表格 100% 宽+
+          全空格只留 1 段+非空格空段≤2+表内段距清零+行高>800 钳 800(简介/进度行豁免 2000);
+    mid=书写行等比缩放(变更表:原版 Word 即 2 页,压回 1 页)——左右边距/表宽/段距/空段全保原版,
+          仅上下边距 1440→900,>1000 的大书写行(变更内容 5739/原因 3008/意见栏 ~2000×3)
+          按原比例缩放到一页预算(书写区比例不失衡,信息行原样);
+    none=原版直出(报告:原版即 1 页,行高 atLeast 随内容自然增长)——版式零改动,仅写占位符。"""
+    if mode == 'tight':
+        for mg in root.iter(W + 'pgMar'):
+            mg.set(W + 'left', '900')
+            mg.set(W + 'right', '900')
+            if int(mg.get(W + 'top', '1440')) > 600:
+                mg.set(W + 'top', '600')
+            if int(mg.get(W + 'bottom', '1440')) > 600:
+                mg.set(W + 'bottom', '600')
+        for tbl in root.iter(W + 'tbl'):
+            tblPr = tbl.find(W + 'tblPr')
+            if tblPr is not None:
+                tw = tblPr.find(W + 'tblW')
+                if tw is not None:
+                    tw.set(W + 'w', '5000')
+                    tw.set(W + 'type', 'pct')
+                layout = tblPr.find(W + 'tblLayout')
+                if layout is None:
+                    layout = ET.SubElement(tblPr, W + 'tblLayout')
+                layout.set(W + 'type', 'autofit')
+            for tc in tbl.iter(W + 'tc'):
+                ps = tc.findall(W + 'p')
+                texts = [para_text(p).strip() for p in ps]
+                if not any(texts):
+                    # 全空格子:只留一段(多余空段占行高)
+                    for extra in ps[1:]:
+                        tc.remove(extra)
+                else:
+                    # 非空格:空段每格至多留 2
+                    empty_idx = [i for i, x in enumerate(texts) if not x]
+                    for i in empty_idx[2:]:
+                        tc.remove(ps[i])
+            # 表内段落间距清零(段前后 0、行距单倍)——Word 表格默认间距在 LibreOffice 下更占高
+            for p in tbl.iter(W + 'p'):
+                pPr = p.find(W + 'pPr')
+                if pPr is None:
+                    continue
+                sp = pPr.find(W + 'spacing')
+                if sp is not None:
+                    sp.set(W + 'before', '0')
+                    sp.set(W + 'after', '0')
+                    if sp.get(W + 'line'):
+                        sp.set(W + 'line', '240')
+                        sp.set(W + 'lineRule', 'auto')
+        # 行高钳制:大留白行(>800)压回 800,简介/进度标记行豁免(2000 供内容展开)
         for tr in root.iter(W + 'tr'):
             trPr = tr.find(W + 'trPr')
             if trPr is None:
@@ -185,11 +185,44 @@ def save(root, out, src, mode='tight'):
             except ValueError:
                 continue
             joined = ''.join(t.text or '' for t in tr.iter(W + 't'))
-            if v > cap and not any(k in joined for k in ('项目简介', '项目计划进度')):
-                th.set(W + 'val', str(cap))
+            if v > 800 and not any(k in joined for k in ('项目简介', '项目计划进度')):
+                th.set(W + 'val', '800')
                 th.set(W + 'hRule', 'atLeast')
-    # 注:原"表尾注缩9pt"逻辑已删——净版改造清空表尾注后,它只会误伤表格外的主标题
-    # (曾把 16pt 标题压成 9pt);标题保持原版字号(登记/变更/验收 16pt,报告 18pt)
+    elif mode == 'mid':
+        for mg in root.iter(W + 'pgMar'):
+            if int(mg.get(W + 'top', '1440')) > 900:
+                mg.set(W + 'top', '900')
+            if int(mg.get(W + 'bottom', '1440')) > 900:
+                mg.set(W + 'bottom', '900')
+        # 书写格空段每格至多留 1(16 个空段的"天然最低高度"会顶住行高缩放,必须先降)
+        for tbl in root.iter(W + 'tbl'):
+            for tc in tbl.iter(W + 'tc'):
+                ps = tc.findall(W + 'p')
+                texts = [para_text(p).strip() for p in ps]
+                if any(texts):
+                    empty_idx = [i for i, x in enumerate(texts) if not x]
+                    for i in empty_idx[1:]:
+                        tc.remove(ps[i])
+        # 大书写行(>1000)等比缩放:一页预算 = A4 11906 - 上下边距1800 - 标题区~900 - 信息行~2350 - 余量300
+        tall = []
+        for tr in root.iter(W + 'tr'):
+            trPr = tr.find(W + 'trPr')
+            th = trPr.find(W + 'trHeight') if trPr is not None else None
+            if th is None:
+                continue
+            try:
+                v = int(th.get(W + 'val', '0'))
+            except ValueError:
+                continue
+            if v > 1000:
+                tall.append((th, v))
+        if tall:
+            budget = 11906 - 1800 - 900 - 2350 - 300
+            factor = min(1.0, budget / sum(v for _, v in tall))
+            for th, v in tall:
+                th.set(W + 'val', str(int(v * factor)))
+                th.set(W + 'hRule', 'atLeast')
+    # mode == 'none':版式零改动
     with zipfile.ZipFile(src) as zin, zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED) as zout:
         for item in zin.namelist():
             if item == 'word/document.xml':
@@ -305,6 +338,20 @@ def insert_cell_by_text(root, marker, ph):
             set_cell_placeholder(tc, ph)
             return
     raise RuntimeError('未找到含 %s 的格子' % marker)
+
+
+def trim_cell_empties(root, marker, keep):
+    """定位全文含 marker 的单元格,空段只保留前 keep 个——报告正文格尾随空段收敛"""
+    for tc in root.iter(W + 'tc'):
+        if marker not in ''.join(t.text or '' for t in tc.iter(W + 't')):
+            continue
+        for p in list(tc.findall(W + 'p')):
+            if not para_text(p).strip():
+                if keep > 0:
+                    keep -= 1  # 前 keep 个空段保留(格内呼吸留白)
+                else:
+                    tc.remove(p)
+        return
 
 
 def insert_placeholder_after(root, marker, ph):
@@ -485,6 +532,9 @@ def make_report(root):
     replace_first_match(root, contains_all('成果形式（可多选）'), '成果形式（可多选）：{{outcomeFormChecks}}', '成果形式勾选')
     # 正文:说明句后的第一个空段插入段落级区块对循环(poi-tl 区块对支持段落重复)
     insert_placeholder_after(root, '页数不限', '{{?reportParagraphs}}{{this}}{{/reportParagraphs}}')
+    # 尾随空段收敛至 5:原 20 个空段在 LibreOffice 下会把签字行顶到第 2 页孤页
+    # (Word 里无此问题——行高 atLeast 4942 保箱体;此处只删空段,行高不动)
+    trim_cell_empties(root, '页数不限', 5)
 
 
 SRC_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -492,7 +542,7 @@ JOBS = [
     ('附件1：成都轻工职业技术大学横向项目登记表【双面打印，控制在两页内】.docx', 'hx_register.docx', make_register, 'tight'),
     ('附件2：成都轻工职业技术大学横向项目重要事项变更表.docx', 'hx_change.docx', make_change, 'mid'),
     ('附件3（含学生版）：成都轻工职业技术大学横向项目验收登记表【双面打印，控制在两页内】.docx', 'hx_acceptance.docx', make_acceptance, 'tight'),
-    ('附件4：横向科研项目验收报告.docx', 'hx_report.docx', make_report, 'light'),
+    ('附件4：横向科研项目验收报告.docx', 'hx_report.docx', make_report, 'none'),
 ]
 
 
