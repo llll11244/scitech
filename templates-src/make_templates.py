@@ -250,10 +250,11 @@ def insert_cell(root, row_keys, col_index, ph):
     raise RuntimeError('未找到行: %s → 列%d 插 %s' % (row_keys, col_index, ph))
 
 
-def make_fixed_rows(root, header_keys, fields, row_count, prefix):
+def make_fixed_rows(root, header_keys, fields, row_count, prefix, stop_keys=()):
     """表头行后 row_count 行改为固定占位符行:第 i 行各列填 {{prefix i+字段}},
     提示文字(XX万元/请自行增减行等)清空。不做行删除/复制——规避 poi-tl 行循环
-    在 vMerge 大表上删行引发 XmlValueDisconnectedException 的坑,且版式与原表一致。"""
+    在 vMerge 大表上删行引发 XmlValueDisconnectedException 的坑,且版式与原表一致。
+    stop_keys:下一区段表头关键词——空行清理到该行即停(防越区段误删)。"""
     for tbl in all_tables(root):
         tr = find_row(tbl, *header_keys)
         if tr is None:
@@ -269,10 +270,12 @@ def make_fixed_rows(root, header_keys, fields, row_count, prefix):
                 if not field:
                     continue  # 首列 vMerge 标签列不放占位符
                 set_cell_placeholder(cs[j], '{{%s%d%s}}' % (prefix, i + 1, field), overwrite=True)
-        # 多余纯空数据行删除(制作期静态删,规避渲染期 POI 删行)
+        # 多余纯空数据行删除(制作期静态删;遇下一区段表头即停)
         filled = set(id(c) for c in cand[:row_count])
         for extra in cand[row_count:]:
             joined = ''.join(para_text(p) for tc in cells(extra) for p in cell_paras(tc))
+            if any(k in joined for k in stop_keys):
+                break
             if id(extra) not in filled and joined.strip() == '':
                 tbl.remove(extra)
         return
@@ -382,9 +385,10 @@ def make_acceptance(root):
     insert_cell(root, ('到账金额核定',), 2, '{{verifiedAmountWan}}')
 
     make_fixed_rows(root, ('姓名', '所在院部', '职称', '承担本项目的工作任务比例'),
-                    ['', 'name', 'unit', 'title', 'major', 'dutyRatio'], 8, 'm')
+                    ['', 'name', 'unit', 'title', 'major', 'dutyRatio'], 8, 'm',
+                    stop_keys=('学生姓名',))
     make_fixed_rows(root, ('学生姓名', '学号', '指导老师'),
-                    ['', 'name', 'studentNo', 'major', 'mentor', 'duty'], 5, 's')
+                    ['', 'name', 'studentNo', 'major', 'mentor', 'duty'], 4, 's')
 
 
 # ============================================================

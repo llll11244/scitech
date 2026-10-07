@@ -77,7 +77,9 @@ public class TemplateController {
 
     /** 当前启用版样例预览(无需 id) */
     @GetMapping("/preview")
-    public void previewEnabled(@RequestParam String tplType, HttpServletResponse response) throws IOException {
+    public void previewEnabled(@RequestParam String tplType, HttpServletRequest request,
+                               HttpServletResponse response) throws IOException {
+        requireAdmin(request);
         byte[] pdf = templateService.renderSamplePdf(tplType);
         response.setContentType(MediaType.APPLICATION_PDF_VALUE);
         response.setContentLength(pdf.length);

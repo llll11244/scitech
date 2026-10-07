@@ -43,7 +43,7 @@ public final class TemplatePlaceholders {
                     "clientNatureChecks", "receivedAmountWan", "usedAmountWan", "leaderName", "deptName",
                     "finishDate", "outcomeFormChecks", "acceptSummary", "verifiedAmountWan"},
             fixedRows("m", 8, "name", "unit", "title", "major", "dutyRatio"),
-            fixedRows("s", 5, "name", "studentNo", "major", "mentor", "duty")));
+            fixedRows("s", 4, "name", "studentNo", "major", "mentor", "duty")));
 
     /** 报告正文用区块对循环:{ {?reportParagraphs}}{{this}}{{/reportParagraphs} } */
     public static final Set<String> REPORT = set("approvalNo", "projectName", "onTimeChecks",

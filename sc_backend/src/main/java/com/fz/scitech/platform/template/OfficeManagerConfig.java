@@ -68,6 +68,12 @@ public class OfficeManagerConfig {
         return available;
     }
 
+    /** 测试注入用:绕过 @Value 构造直接挂已启动的进程池 */
+    void inject(OfficeManager manager) {
+        this.officeManager = (LocalOfficeManager) manager;
+        this.available = manager != null;
+    }
+
     public OfficeManager getManager() {
         return officeManager;
     }
