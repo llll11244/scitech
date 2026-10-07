@@ -123,7 +123,7 @@ def load(path):
 
 def save(root, out, src):
     # 版式收紧,压回两页内(原 .doc 排版在 LibreOffice 下空表即 3 页):
-    # ①页边距 1800→900/上下 600 ②表格 100% 自适应 ③空格子只留 1 段 ④表尾注释 9pt
+    # ①页边距 1800→900/上下 600 ②表格 100% 自适应 ③空格子只留 1 段(表尾注已随净版改造删除,标题保持原字号)
     for mg in root.iter(W + 'pgMar'):
         mg.set(W + 'left', '900')
         mg.set(W + 'right', '900')
@@ -149,25 +149,41 @@ def save(root, out, src):
                 # 全空格子:只留一段(多余空段占行高)
                 for extra in ps[1:]:
                     tc.remove(extra)
-    # 表格外段落(表尾说明)缩到 9pt
-    body = root.find(W + 'body')
-    if body is not None:
-        for p in [c for c in body if c.tag == W + 'p']:
-            if not para_text(p).strip():
+            else:
+                # 非空格:空段每格至多留 2(总结格原 14 空段、报告正文格 20 空段占高)
+                empty_idx = [i for i, x in enumerate(texts) if not x]
+                for i in empty_idx[2:]:
+                    tc.remove(ps[i])
+        # 表内段落间距清零(段前后 0、行距单倍)——Word 表格默认间距在 LibreOffice 下更占高
+        for p in tbl.iter(W + 'p'):
+            pPr = p.find(W + 'pPr')
+            if pPr is None:
                 continue
-            for r in p.iter(W + 'r'):
-                rPr = r.find(W + 'rPr')
-                if rPr is None:
-                    rPr = ET.Element(W + 'rPr')
-                    r.insert(0, rPr)
-                sz = rPr.find(W + 'sz')
-                if sz is None:
-                    sz = ET.SubElement(rPr, W + 'sz')
-                sz.set(W + 'val', '18')
-                szCs = rPr.find(W + 'szCs')
-                if szCs is None:
-                    szCs = ET.SubElement(rPr, W + 'szCs')
-                szCs.set(W + 'val', '18')
+            sp = pPr.find(W + 'spacing')
+            if sp is not None:
+                sp.set(W + 'before', '0')
+                sp.set(W + 'after', '0')
+                if sp.get(W + 'line'):
+                    sp.set(W + 'line', '240')
+                    sp.set(W + 'lineRule', 'auto')
+    # 行高钳制:大留白行(>800 twips)压回 800,简介/进度标记行豁免(保持 2000 供内容展开)
+    for tr in root.iter(W + 'tr'):
+        trPr = tr.find(W + 'trPr')
+        if trPr is None:
+            continue
+        th = trPr.find(W + 'trHeight')
+        if th is None:
+            continue
+        try:
+            v = int(th.get(W + 'val', '0'))
+        except ValueError:
+            continue
+        joined = ''.join(t.text or '' for t in tr.iter(W + 't'))
+        if v > 800 and not any(k in joined for k in ('项目简介', '项目计划进度')):
+            th.set(W + 'val', '800')
+            th.set(W + 'hRule', 'atLeast')
+    # 注:原"表尾注缩9pt"逻辑已删——净版改造清空表尾注后,它只会误伤表格外的主标题
+    # (曾把 16pt 标题压成 9pt);标题保持原版字号(登记/变更/验收 16pt,报告 18pt)
     with zipfile.ZipFile(src) as zin, zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED) as zout:
         for item in zin.namelist():
             if item == 'word/document.xml':
@@ -276,6 +292,32 @@ def insert_cell(root, row_keys, col_index, ph, overwrite=False):
     raise RuntimeError('未找到行: %s → 列%d 插 %s' % (row_keys, col_index, ph))
 
 
+def insert_cell_by_text(root, marker, ph):
+    """定位全文含 marker 的单元格,向首段插占位符(纯净版原因格/总结格:首段为空段,签字段在后)"""
+    for tc in root.iter(W + 'tc'):
+        if marker in ''.join(t.text or '' for t in tc.iter(W + 't')):
+            set_cell_placeholder(tc, ph)
+            return
+    raise RuntimeError('未找到含 %s 的格子' % marker)
+
+
+def insert_placeholder_after(root, marker, ph):
+    """定位含 marker 的单元格,向 marker 段之后第一个空段插占位符(报告正文格:说明句后留白区开头)"""
+    for tc in root.iter(W + 'tc'):
+        ps = tc.findall(W + 'p')
+        texts = [para_text(p) for p in ps]
+        if not any(marker in t for t in texts):
+            continue
+        for i, t in enumerate(texts):
+            if marker in t:
+                for q in ps[i + 1:]:
+                    if not para_text(q).strip():
+                        add_run_text(q, ph)
+                        return
+                raise RuntimeError('marker 后无空段可插: ' + marker)
+    raise RuntimeError('未找到含 marker 的段落: ' + marker)
+
+
 def make_fixed_rows(root, header_keys, fields, row_count, prefix, stop_keys=()):
     """表头行后 row_count 行改为固定占位符行:第 i 行各列填 {{prefix i+字段}},
     提示文字(XX万元/请自行增减行等)清空。不做行删除/复制——规避 poi-tl 行循环
@@ -309,7 +351,7 @@ def make_fixed_rows(root, header_keys, fields, row_count, prefix, stop_keys=()):
 
 
 # ============================================================
-# 附件1 → hx_register.docx
+# 附件1 → hx_register.docx(2026-10-07 起基于用户纯净版:示例/字数/表尾注已由用户手工清除)
 # ============================================================
 def make_register(root):
     replace_first_match(root, contains_all('技术开发', '技术咨询'), '{{projectTypeChecks}}', '项目类型勾选')
@@ -318,11 +360,14 @@ def make_register(root):
     replace_first_match(root, contains_all('政府部门', '企业'), '{{clientNatureChecks}}', '性质勾选')
     replace_first_match(root, contains_all('人民币', '大写'),
                         '人民币 {{contractAmount}} 元 （大写：{{contractAmountCapital}}）', '合同经费')
-    replace_span(root, contains_all('示例（要求信息完整）'), '{{projectSummary}}', '项目简介')
-    remove_first_para(root, lambda s: s.strip() in ('示例：', '示例:'))
-    replace_span(root, contains_all('2025年X月'), '{{progressPlan}}', '项目计划进度')
-    replace_first_match(root, contains_all('学校仪器设备'), '{{useSchoolAssetChecks}}', '设备场地勾选')
-    replace_first_match(root, contains_all('是否收取管理费：'), '{{chargeMgmtFeeChecks}}', '管理费勾选')
+    # 简介/进度:纯净版已清示例,标签旁空值格直接插占位符
+    insert_cell(root, ('项目简介',), 1, '{{projectSummary}}')
+    insert_cell(root, ('项目计划进度',), 1, '{{progressPlan}}')
+    # 设备/管理费:标签+内联选项同段——保留标签,只把选项部分换成占位符(值=纯勾选串)
+    replace_first_match(root, contains_all('学校仪器设备'),
+                        '项目是否以使用学校仪器设备和场地为主：{{useSchoolAssetChecks}}', '设备场地勾选')
+    replace_first_match(root, contains_all('是否收取管理费'),
+                        '是否收取管理费：{{chargeMgmtFeeChecks}}', '管理费勾选')
     replace_first_match(root, contains_all('收取管理费金额'), '收取管理费金额：{{mgmtFeeAmount}} 元', '管理费金额')
     replace_first_match(root, contains_all('立项登记日期'), '立项登记日期  {{hxRegisterDate}}', '登记日期')
 
@@ -374,58 +419,57 @@ def shrink_row_height(root, row_key, new_height):
 
 
 # ============================================================
-# 附件2 → hx_change.docx
+# 附件2 → hx_change.docx(基于用户纯净版:示例/预填/表尾注已由用户手工清除)
 # ============================================================
 def make_change(root):
-    replace_first_match(root, contains_all('技术开发', '技术咨询'), '{{projectTypeChecks}}', '项目类型勾选')
-    replace_first_match(root, contains_all('项目经费', '执行周期', '其他约定'), '{{changeTypeChecks}}', '变更内容勾选')
-    replace_first_match(root, contains_all('对合同约定的关键内容进行调整'), '{{changeContent}}', '变更内容说明')
-    clean_cell(root, '{{changeContent}}', lambda s: '{{changeContent}}' in s)  # 清同格示例残留
-    replace_first_match(root, contains_all('示例：因涉及后续收益'), '{{changeReason}}', '变更原因')
-    # 意见栏预填清空(纸面留白,参考措辞迁 templates-src/填写提示.md)
-    remove_all_paras(root, contains_any('同意该项目重要事项的变更'))
-
     insert_cell(root, ('项目名称',), 1, '{{projectName}}')
     insert_cell(root, ('项目编号', '项目类别'), 1, '{{approvalNo}}')
+    insert_cell(root, ('项目编号', '项目类别'), 3, '{{projectTypeChecks}}', overwrite=True)
     insert_cell(root, ('项目负责人', '联系方式'), 1, '{{leaderName}}')
     insert_cell(root, ('项目负责人', '联系方式'), 3, '{{leaderPhone}}')
+    # 变更内容勾选行(含"项目经费"等选项)与空白的变更内容行同名:勾选行按选项关键词定位,
+    # 空白行=整行文字仅"变更内容"标签(精确匹配,避免替换后的勾选行被误配)
+    insert_cell(root, ('变更内容', '项目经费', '其他约定'), 1, '{{changeTypeChecks}}', overwrite=True)
+    for tbl in all_tables(root):
+        for tr in rows(tbl):
+            joined = ''.join(para_text(p) for tc in cells(tr) for p in cell_paras(tc))
+            if joined.strip() == '变更内容':
+                set_cell_placeholder(cells(tr)[1], '{{changeContent}}')
+                break
+    # 原因格:首段空段直插(签字段在后,保留)
+    insert_cell_by_text(root, '申请人（签字）', '{{changeReason}}')
 
 
 # ============================================================
-# 附件3 → hx_acceptance.docx
+# 附件3 → hx_acceptance.docx(基于用户纯净版:举例/预填/表头提示/表尾注已由用户清除)
 # ============================================================
 def make_acceptance(root):
-    replace_first_match(root, contains_all('双面打印控制在2页内'), '项目名称', '表头提示清理')  # 原标签混入打印提示
-    replace_first_match(root, contains_all('技术开发', '技术咨询'), '{{projectTypeChecks}}', '项目类型勾选')
-    replace_first_match(root, contains_all('年', '月', '至'), '{{startEndDate}}', '起止时间')
-    replace_first_match(root, contains_all('政府部门', '企业'), '{{clientNatureChecks}}', '性质勾选')
-    # 成果形式:标签保留,占位符覆盖选项文字格(原做法把标签格整个换掉,选项格残留会重复显示)
-    insert_cell(root, ('成果形式', '技术报告'), 1, '{{outcomeFormChecks}}', overwrite=True)
-    remove_first_para(root, lambda s: s.strip() in ('举例：', '举例:'))
-    replace_span(root, contains_all('目标达成情况'), '{{acceptSummary}}', '完成情况总结',
-                 end_pred=lambda s: '项目负责人（签字）' in s)
-    # 意见栏预填清空(纸面留白,参考措辞迁 templates-src/填写提示.md)
-    remove_all_paras(root, contains_any('情况属实，同意验收', '项目团队已于'))
-
     insert_cell(root, ('项目编号', '项目名称'), 1, '{{approvalNo}}')
     insert_cell(root, ('项目编号', '项目名称'), 3, '{{projectName}}')
+    replace_first_match(root, contains_all('技术开发', '技术咨询'), '{{projectTypeChecks}}', '项目类型勾选')
+    replace_first_match(root, contains_all('年', '月', '至'), '{{startEndDate}}', '起止时间')
     insert_cell(root, ('委托单位', '名称'), 2, '{{clientName}}')
+    replace_first_match(root, contains_all('政府部门', '企业'), '{{clientNatureChecks}}', '性质勾选')
     insert_cell(root, ('到账经费', '使用经费'), 1, '{{receivedAmountWan}}')
     insert_cell(root, ('到账经费', '使用经费'), 3, '{{usedAmountWan}}')
     insert_cell(root, ('项目负责人', '所在院部'), 1, '{{leaderName}}')
     insert_cell(root, ('项目负责人', '所在院部'), 3, '{{deptName}}')
     insert_cell(root, ('完成时间',), 1, '{{finishDate}}')
+    insert_cell(root, ('成果形式', '技术报告'), 1, '{{outcomeFormChecks}}', overwrite=True)
     insert_cell(root, ('到账金额核定',), 2, '{{verifiedAmountWan}}')
+    # 总结格:首段空段直插(其后留白段与签字段保留)
+    insert_cell_by_text(root, '项目负责人（签字）', '{{acceptSummary}}')
 
     make_fixed_rows(root, ('姓名', '所在院部', '职称', '承担本项目的工作任务比例'),
                     ['', 'name', 'unit', 'title', 'major', 'dutyRatio'], 8, 'm',
-                    stop_keys=('学生姓名',))
+                    stop_keys=('学生姓名',))  # 空行清理到学生表头即停,防越区误删
     make_fixed_rows(root, ('学生姓名', '学号', '指导老师'),
                     ['', 'name', 'studentNo', 'major', 'mentor', 'duty'], 4, 's')
 
 
 # ============================================================
-# 附件4 → hx_report.docx
+# 附件4 → hx_report.docx(基于用户纯净版:大纲/参考说明已由用户清除,
+# 说明句"（包括项目成果内容提要…页数不限。）"按用户保留)
 # ============================================================
 def make_report(root):
     replace_first_match(root, contains_all('项目编号：'), '项目编号：{{approvalNo}}', '项目编号')
@@ -433,11 +477,8 @@ def make_report(root):
     replace_first_match(root, contains_all('是否按期完成'), '是否按期完成：{{onTimeChecks}}', '按期完成勾选')
     replace_first_match(root, contains_all('项目类型：'), '项目类型：{{projectTypeChecks}}', '项目类型勾选')
     replace_first_match(root, contains_all('成果形式（可多选）'), '成果形式（可多选）：{{outcomeFormChecks}}', '成果形式勾选')
-    # 正文:整格大段提示 → 段落级区块对循环(poi-tl 区块对支持段落重复)
-    replace_first_match(root, contains_all('一、项目目标达成情况'), '{{?reportParagraphs}}{{this}}{{/reportParagraphs}}', '正文提示')
-    # 清残留:说明2段+大纲19段删除,保留占位符段与签字/日期段(纸面净版,大纲迁 templates-src/填写提示.md)
-    clean_cell(root, '{{?reportParagraphs}}',
-               lambda s: '{{?reportParagraphs}}' in s or '项目负责人（签字）' in s or s.strip().startswith('年'))
+    # 正文:说明句后的第一个空段插入段落级区块对循环(poi-tl 区块对支持段落重复)
+    insert_placeholder_after(root, '页数不限', '{{?reportParagraphs}}{{this}}{{/reportParagraphs}}')
 
 
 SRC_DIR = os.path.dirname(os.path.abspath(__file__))

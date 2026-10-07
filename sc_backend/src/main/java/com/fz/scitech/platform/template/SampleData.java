@@ -107,8 +107,8 @@ public final class SampleData {
         m.put("budgetReception", "5000.00");
         m.put("budgetCollab", "40000.00");
         m.put("budgetOther", "20000.00");
-        m.put("useSchoolAssetChecks", checks("是", "是", "否") + "以使用学校仪器设备和场地为主");
-        m.put("chargeMgmtFeeChecks", "是否收取管理费:" + checks("是", "是", "否"));
+        m.put("useSchoolAssetChecks", checks("是", "是", "否"));
+        m.put("chargeMgmtFeeChecks", checks("是", "是", "否"));
         m.put("mgmtFeeAmount", "10000.00");
         m.put("hxRegisterDate", "");
         putFixedRows(m, "m", 6, sampleMembers(), "name", "unit", "title", "major", "duty");
