@@ -154,7 +154,13 @@ public class HxService {
             project.setName(dto.getName());
             project.setLeaderName(dto.getLeaderName());
             project.setDeptId(dto.getDeptId());
-            projectMapper.updateById(project);
+            // 编辑路径一律显式 .set(与下方 hx 扩展行/F1 同口径):NOT_NULL 策略下 updateById 跳过
+            // null 字段;name/leaderName/deptId 经 validateRegister 必填非空,显式写库防御后续字段放开
+            projectMapper.update(null, new LambdaUpdateWrapper<RpProject>()
+                    .eq(RpProject::getId, project.getId())
+                    .set(RpProject::getName, project.getName())
+                    .set(RpProject::getLeaderName, project.getLeaderName())
+                    .set(RpProject::getDeptId, project.getDeptId()));
         }
         RpHxProject hx = hxMapper.selectById(project.getId());
         boolean hxNew = hx == null;
@@ -167,7 +173,23 @@ public class HxService {
         if (hxNew) {
             hxMapper.insert(hx);
         } else {
-            hxMapper.updateById(hx);
+            // 同 F1:NOT_NULL 策略下 updateById 跳过实体 null 字段——教师清空「管理费金额/简介/进度/
+            // 邮箱」等可选字段后旧值残留,且会渲进待签件污染交付物——表单字段显式 .set 整体覆盖(null 也写);
+            // hxRegisterDate/verifiedAmount 非表单字段(科技处确认/验收时写入)不在覆盖之列
+            hxMapper.update(null, new LambdaUpdateWrapper<RpHxProject>()
+                    .eq(RpHxProject::getProjectId, hx.getProjectId())
+                    .set(RpHxProject::getProjectType, hx.getProjectType())
+                    .set(RpHxProject::getClientName, hx.getClientName())
+                    .set(RpHxProject::getClientNature, hx.getClientNature())
+                    .set(RpHxProject::getContractAmount, hx.getContractAmount())
+                    .set(RpHxProject::getStartDate, hx.getStartDate())
+                    .set(RpHxProject::getEndDate, hx.getEndDate())
+                    .set(RpHxProject::getUseSchoolAsset, hx.getUseSchoolAsset())
+                    .set(RpHxProject::getChargeMgmtFee, hx.getChargeMgmtFee())
+                    .set(RpHxProject::getMgmtFeeAmount, hx.getMgmtFeeAmount())
+                    .set(RpHxProject::getLeaderEmail, hx.getLeaderEmail())
+                    .set(RpHxProject::getProjectSummary, hx.getProjectSummary())
+                    .set(RpHxProject::getProgressPlan, hx.getProgressPlan()));
         }
         replaceMembers(project.getId(), dto.getMembers(), username);
         replaceBudgets(project.getId(), dto.getBudgets(), username);

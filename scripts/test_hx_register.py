@@ -101,6 +101,19 @@ def main():
     # 10. 删草稿(新建草稿→删,连带成员预算附件逻辑删)
     r = requests.post(BASE + "/hx/register/draft", headers=t, json=dto).json()
     fid2 = r["data"]
+
+    # 10a/终审补充(同 F1,MP NOT_NULL 策略):草稿带管理费金额保存→编辑清空可选字段重存→
+    #     详情 mgmtFeeAmount/leaderEmail 须为空(旧 updateById 会残留 10000 渲进待签件)
+    dto3 = dict(dto, flowId=fid2,
+                hx=dict(dto["hx"], chargeMgmtFee=0, mgmtFeeAmount=None,
+                        leaderEmail=None, projectSummary=None, progressPlan=None))
+    r = requests.post(BASE + "/hx/register/draft", headers=t, json=dto3).json()
+    assert r.get("code") == 0, "终审补充前置:编辑清空重存失败:" + str(r)
+    d = requests.get(BASE + "/hx/%d" % fid2, headers=t).json()["data"]
+    check("登记草稿编辑空值显式置空",
+          d["hx"].get("mgmtFeeAmount") is None and d["hx"].get("leaderEmail") is None,
+          "mgmtFeeAmount=%r leaderEmail=%r" % (d["hx"].get("mgmtFeeAmount"), d["hx"].get("leaderEmail")))
+
     r = requests.delete(BASE + "/hx/%d" % fid2, headers=t)
     check("删草稿", r.json().get("code") == 0, str(r.json()))
 
