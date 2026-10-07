@@ -33,7 +33,7 @@ public final class TemplatePlaceholders {
                     "leaderPhone", "leaderEmail", "projectSummary", "progressPlan",
                     "budgetBusiness", "budgetLabor", "budgetPerformance", "budgetReception", "budgetCollab", "budgetOther",
                     "useSchoolAssetChecks", "chargeMgmtFeeChecks", "mgmtFeeAmount", "hxRegisterDate"},
-            fixedRows("m", 6, "name", "unit", "title", "major", "duty")));
+            fixedRows("m", 10, "name", "unit", "title", "major", "duty"))); // 原版 10 空行(2026-10-07 动态行决策)
 
     public static final Set<String> CHANGE = set("approvalNo", "projectName", "projectTypeChecks",
             "leaderName", "leaderPhone", "changeTypeChecks", "changeContent", "changeReason");
@@ -43,7 +43,7 @@ public final class TemplatePlaceholders {
                     "clientNatureChecks", "receivedAmountWan", "usedAmountWan", "leaderName", "deptName",
                     "finishDate", "outcomeFormChecks", "acceptSummary", "verifiedAmountWan"},
             fixedRows("m", 8, "name", "unit", "title", "major", "dutyRatio"),
-            fixedRows("s", 4, "name", "studentNo", "major", "mentor", "duty")));
+            fixedRows("s", 5, "name", "studentNo", "major", "mentor", "duty"))); // 原版 5 空行
 
     /** 报告正文用区块对循环:{ {?reportParagraphs}}{{this}}{{/reportParagraphs} } */
     public static final Set<String> REPORT = set("approvalNo", "projectName", "onTimeChecks",
@@ -59,11 +59,11 @@ public final class TemplatePlaceholders {
         };
     }
 
-    /** 页数上限(hx_report 不限;登记/验收原版版式在 LibreOffice 下 3 页,2026-10-07 随"保真直出"放宽) */
+    /** 页数上限(hx_report 不限;登记/验收恢复原版空行数(成员10/学生5)后 LibreOffice 实测 4 页,2026-10-07 随动态行决策放宽) */
     public static int maxPages(String tplType) {
         return switch (tplType) {
             case "hx_report" -> 200;
-            case "hx_register", "hx_acceptance" -> 3;
+            case "hx_register", "hx_acceptance" -> 4;
             default -> 2;
         };
     }

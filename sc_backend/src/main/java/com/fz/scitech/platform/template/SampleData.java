@@ -111,7 +111,7 @@ public final class SampleData {
         m.put("chargeMgmtFeeChecks", checks("是", "是", "否"));
         m.put("mgmtFeeAmount", "10000.00");
         m.put("hxRegisterDate", "");
-        putFixedRows(m, "m", 6, sampleMembers(), "name", "unit", "title", "major", "duty");
+        putFixedRows(m, "m", 10, sampleMembers(), "name", "unit", "title", "major", "duty"); // 原版 10 空行,样例 3 条+7 空行如实展示
         return m;
     }
 
@@ -144,7 +144,7 @@ public final class SampleData {
         s1.put("mentor", "张三");
         s1.put("duty", "传感器数据采集程序开发");
         students.add(s1);
-        putFixedRows(m, "s", 4, students, "name", "studentNo", "major", "mentor", "duty");
+        putFixedRows(m, "s", 5, students, "name", "studentNo", "major", "mentor", "duty"); // 原版 5 空行
         m.put("finishDate", "2027年12月20日");
         m.put("outcomeFormChecks", "√技术报告 □鉴定报告 √专利 □咨询报告 □其他");
         m.put("acceptSummary", "【样例】目标达成情况:完成全部改造内容,自动化率由原45%提升至88%,生产效率提高30%。"

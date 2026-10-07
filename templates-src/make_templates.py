@@ -507,7 +507,7 @@ def make_register(root):
         continue
 
     make_fixed_rows(root, ('姓名', '所在单位', '职称', '专业', '承担本项目的工作任务'),
-                    ['', 'name', 'unit', 'title', 'major', 'duty'], 6, 'm')
+                    ['', 'name', 'unit', 'title', 'major', 'duty'], 10, 'm')  # 原版 10 空行全保留(2026-10-07 动态行决策:预置=原版排版,超员由渲染前克隆扩行)
     # 保真模式:不再压简介/进度行高(原 shrink 2000 已删,行高保持用户纯净版原样)
 
 
@@ -575,7 +575,7 @@ def make_acceptance(root):
                     ['', 'name', 'unit', 'title', 'major', 'dutyRatio'], 8, 'm',
                     stop_keys=('学生姓名',))  # 空行清理到学生表头即停,防越区误删
     make_fixed_rows(root, ('学生姓名', '学号', '指导老师'),
-                    ['', 'name', 'studentNo', 'major', 'mentor', 'duty'], 4, 's')
+                    ['', 'name', 'studentNo', 'major', 'mentor', 'duty'], 5, 's')  # 原版 5 空行全保留(同上决策)
 
 
 # ============================================================

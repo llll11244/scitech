@@ -43,7 +43,8 @@ DB_URL='jdbc:mysql://...' DB_USER=.. DB_PASSWORD=.. SC_JWT_SECRET='≥32字符' 
 4. el-input 原生 input 无 type attribute(仅 DOM property):浏览器自动化选择器用 `input[placeholder=...]` 而非 `input[type=text]`
 5. **poi-tl 行循环(LoopRowTableRenderPolicy)在 vMerge 大表上删行会引发 XmlValueDisconnectedException** 殃及后续文本标签——模板一律用固定行占位符(m1name..m6duty),不做行循环
 6. **勾选符号字形坑**:☑(U+2611) 宋体无字形→LibreOffice 豆腐块;■(U+25A0) 可用但用户要求打勾样式——**最终方案 √(U+221A,GB2312/宋体全覆盖)+□(U+25A1)**,拼法参照 SampleData.checks;换符号后必重跑渲染冒烟人工核对
-7. **原 .doc 制式表在 LibreOffice 下空表即 3 页**(Word 排版更松):已做版式压缩(边距900/600+表格pct100%+空段清理+简介进度行高2000),四模板 2/2/2/1 页;模板改版后必须重跑 RenderSmokeTest 验页数
+7. **原 .doc 制式表在 LibreOffice 下空表即 3 页**(Word 排版更松):已做版式压缩(边距900/600+表格pct100%+空段清理+简介进度行高2000),四模板 2/2/2/1 页;模板改版后必须重跑 RenderSmokeTest 验页数。Task18 恢复原版空行数后登记/验收实测 4 页,maxPages 已放宽至 4
+8. **VS Code JDT 语言服务(redhat.java)与命令行 mvn 混写 target/classes**:mvn 增量编译可能捡到 JDT 的失败编译桩(运行时报 `Unresolved compilation problems` 而 mvn 编译"无错")——遇到先 `mvn clean` 重跑再看真实错误
 
 ## LibreOffice 部署包(652MB,决策#37)
 - 版本 26.2.6.3:官方 MSI(USTC 镜像下载)+ `msiexec /a` 管理解包(免安装) + `scripts/trim_libreoffice.sh` 裁剪(1537→652MB,渲染与裁剪前逐字一致,冷热启动均验)
@@ -72,12 +73,13 @@ token 带 uid claim;AuthInterceptor 每请求按 uid 查库(停用立即 401、r
 - [x] Task15 模板净版改造:示例/意见预填/表尾注全清+勾选 ■→√(踩坑#6 定稿);提示前移方案落 templates-src/填写提示.md;新模板重入库;JUnit 16/16+脚本 13/13+4 张样例 PDF 目检 2026-10-07
 - [x] Task16 基于用户纯净版重制 4 张模板(用户手工清提示+提供权威提示文案→填写提示.md);make_* 全改为"标签保留/空格插占位符"路线;修复标题被 9pt 误压;**格式克隆定稿**:插占位符一律克隆参考 rPr(格内文字run→段落标记rPr,不造裸run/不硬编码字体),标签+选项同段用 options_to_placeholder(标签run不动,占位符继承选项run格式),报告20空段全保留;新增 check_fidelity.py 保真自检(R1格式不发明/R2结构不动/R3文本只增占位符)4/4 PASS;页数上限放宽登记/验收=3(LibreOffice比Word排版松,Word里仍2页);strip_checkbox_syms 清 Wingdings 空选框 sym 符号(文字比对不可见,不清会与值的√/□叠加成串小方框);带数据渲染 3/2/3/2 页,JUnit 16/16 2026-10-07
 - [x] Task17 直出 Word:render 双出(docx 主交付,返回其附件 id,biz_type hx_docx/hx_final_docx + PDF 副产物 hx_pdf/hx_final_pdf 落盘不受开关影响,前端 PDF 显隐=sys_config.deliver_pdf_visible 默认 false)、renderDocxStream(N3 分屏预览同口径,纯 poi-tl 不转换不落盘)、/template/preview-docx 样例直出、ConfigController /config/{key}(登录可读,仅值型展示配置)+data.sql 开关种子;JUnit 17/17(新增双出测试)+脚本 auth4/template5/render13 全绿。**踩坑:被中断的 mvn test 会在 %TEMP% 留 render-* 残留、target/test-upload 留 pending_* 文件对,致 countTempResidue/双出计数断言误报红(删残留即绿);后端 java 必须仓库根 cwd 启动,否则 LibreOffice 找不到 PDF 降级(启动方式已改)** 2026-10-07
-- [ ] N3 教师端三流程(rp_hx_* 实体/登记/变更/验收接口+分屏预览页;填报分屏预览=docx-preview 前端渲染 Word 版+顶部提示"打印以下载 Word 为准",接口走 renderDocxStream 同口径;字段提示+预览区办理提示条文案见 templates-src/填写提示.md) / N4 科技处端 / N5 整体验收(依赖 N1/N2 实际形态另行编写计划)
+- [x] Task18 动态行恢复原版排版+超员克隆扩行:登记成员 m1-m6→**m1-m10**、验收学生 s1-s4→**s1-s5**(原版附件实测口径,空行保留=默认与纯净模板排版/字体一致);超预置条数渲染前扩行(TemplateService.expandDynamicRows:克隆组末行 CTRow 深拷贝插组末+占位符改号,XmlCursor 仅原地改文本规避踩坑#5;**契约:数据条数按 {prefix}{i}name 从 1 起连续非空计数,调用方连续平铺**);maxPages 登记/验收 3→4(10 空行实测);SampleData/TemplatePlaceholders/占位符清单同步;check_fidelity 4/4+JUnit 18/18(dynamicRows 用例:预置不增删行/12条扩2行列宽一致/扩行过 LibreOffice 转换)+脚本 template5/render13/auth4 全绿;新模板已重传入库,样例在 docs/samples/(未提交,人工目检用) 2026-10-07
+- [ ] N3 教师端三流程(rp_hx_* 实体/登记/变更/验收接口+分屏预览页;填报分屏预览=docx-preview 前端渲染 Word 版+顶部提示"打印以下下载 Word 为准",接口走 renderDocxStream 同口径;RenderModelBuilder 成员平铺遵守连续非空契约,超预置条数由 expandDynamicRows 自动扩行;字段提示+预览区办理提示条文案见 templates-src/填写提示.md) / N4 科技处端 / N5 整体验收(依赖 N1/N2 实际形态另行编写计划)
 
 ## N2 关键交付物速查
 - 渲染管线:`PdfRenderService.render(RenderContext,model)→docx附件id`(双出落盘 upload/hx/{pid}/{ftype}/{fid}/pending_|final_*.{docx,pdf}:docx 主交付 hx_docx/hx_final_docx、PDF 隐藏副产物 hx_pdf/hx_final_pdf);`renderPreview(tplType,model)→(pdf字节,页数)`(决策#36);`renderDocxStream(tplType,model)→docx字节`(N3 填报分屏预览同口径,不转换不落盘)
-- 模板:templates-src/hx_{register,change,acceptance,report}.docx(2026-10-07 净版:无示例/意见预填/表尾注)+ make_templates.py(从原始.doc重生成,幂等)+占位符清单.md+填写提示.md(迁出提示文案,N3 前端用);成员 m1-m6/m8、学生 s1-s4 固定行;勾选组 √/□
-- 测试全绿口径:mvn test -Drender.smoke=true -Dpdf.smoke=true(17/17);scripts/test_auth.py(4)+test_template.py(5)+test_render.py(13,含 docx 直出预览+交付开关)
+- 模板:templates-src/hx_{register,change,acceptance,report}.docx(2026-10-07 净版:无示例/意见预填/表尾注)+ make_templates.py(从原始.doc重生成,幂等)+占位符清单.md+填写提示.md(迁出提示文案,N3 前端用);动态行预置=原版空行数(登记成员 m1-m10/验收成员 m1-m8、学生 s1-s5),超员渲染前克隆扩行(格式与源行一致);勾选组 √/□
+- 测试全绿口径:mvn test -Drender.smoke=true -Dpdf.smoke=true(18/18);scripts/test_auth.py(4)+test_template.py(5)+test_render.py(13,含 docx 直出预览+交付开关)
 - 部署包=sc-backend.jar+libreoffice/(652MB 裁剪版)+upload/+backup/+mysqldump.exe ≈716MB,任意目录可起(相对路径cwd=包根)
 
 ## 约定

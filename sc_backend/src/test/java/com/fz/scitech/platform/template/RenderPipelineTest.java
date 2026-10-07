@@ -106,6 +106,13 @@ class RenderPipelineTest {
         // 直出 Word 决策(2026-10-07):render() 双出——docx 主交付(hx_docx) + PDF 副产物(hx_pdf),
         // 返回 docx 附件 id;模板/附件 mapper 均 Mockito 桩
         Files.createDirectories(Path.of("target/test-upload"));
+        // 清理本用例历史落盘(否则重跑累计 pending_* 对,恰好1个的断言必挂)
+        Path histDir = Path.of("target/test-upload/hx");
+        if (Files.exists(histDir)) {
+            try (Stream<Path> walk = Files.walk(histDir)) {
+                walk.sorted(java.util.Comparator.reverseOrder()).map(Path::toFile).forEach(File::delete);
+            }
+        }
         Files.copy(Path.of("../templates-src/hx_change.docx"),
                 Path.of("target/test-upload/test-tpl.docx"), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
         com.fz.scitech.platform.template.mapper.SysTemplateMapper tplMapper =
@@ -141,6 +148,71 @@ class RenderPipelineTest {
         String[] pdf = dir.list((d, n) -> n.startsWith("pending_") && n.endsWith(".pdf"));
         assertTrue(docx != null && docx.length == 1, "应落盘 1 个 pending_*.docx");
         assertTrue(pdf != null && pdf.length == 1, "应落盘 1 个 pending_*.pdf(隐藏副产物)");
+    }
+
+    @Test
+    void dynamicRowsPresetKeptAndExpandedBeyond() throws Exception {
+        // 动态行决策(2026-10-07):登记表预置 m1-m10(原版 10 空行)——
+        // ≤10 条:模板原样渲染,空行保留不裁;>10 条:渲染前克隆末行动态行扩行,克隆行格式与源行一致
+        File tpl = new File("../templates-src/hx_register.docx");
+
+        // ① ≤预置:纯样例(3 条成员),行数=模板原版 32 行,尾部空行保留
+        Path out1 = Path.of("target/test-rows-preset.docx");
+        templateService.renderDocx("hx_register", tpl, out1.toFile(), SampleData.forType("hx_register"));
+        String xml1 = docXml(out1);
+        assertEquals(32, countRows(xml1), "预置行数下不得增删行(空行保留)");
+        assertTrue(!xml1.contains("{{"), "占位符应全部渲掉");
+
+        // ② >预置:12 条连续成员(m1-m12 全有值,渲染端按条数连续平铺是契约),扩 2 行(共 34 行),
+        //    m11/m12 值出现,克隆行列宽与数据行一致
+        Map<String, Object> model = SampleData.forType("hx_register");
+        for (int i = 4; i <= 12; i++) {
+            model.put("m" + i + "name", "成员" + i);
+            model.put("m" + i + "unit", "测试学院");
+            model.put("m" + i + "title", "讲师");
+            model.put("m" + i + "major", "机械工程");
+            model.put("m" + i + "duty", "扩行验证");
+        }
+        Path out2 = Path.of("target/test-rows-expanded.docx");
+        templateService.renderDocx("hx_register", tpl, out2.toFile(), model);
+        String xml2 = docXml(out2);
+        assertEquals(34, countRows(xml2), "12 条成员应扩 2 行");
+        assertTrue(xml2.contains("成员11") && xml2.contains("成员12"), "扩行数据应渲染");
+        assertTrue(!xml2.contains("{{"), "占位符应全部渲掉");
+        assertEquals(colWidths(rowOf(xml1, "李四")), colWidths(rowOf(xml2, "成员11")),
+                "克隆行列宽应与数据行一致(排版保真)");
+
+        // ③ 扩行结果过完整管线:renderToTemp(含 LibreOffice docx→PDF 转换+页数校验),vMerge 延伸后可正常转换
+        PdfRenderService.TempRender tr = renderService.renderToTemp("hx_register", tpl, model, "expand-test", "tester");
+        try {
+            assertTrue(tr.pdf().toFile().length() > 10_000 && tr.pages() >= 1, "扩行 docx 应可转 PDF");
+            System.out.println("扩行渲染 pages=" + tr.pages());
+        } finally {
+            Files.deleteIfExists(tr.pdf());
+        }
+    }
+
+    private static String docXml(Path docx) throws Exception {
+        try (java.util.zip.ZipFile z = new java.util.zip.ZipFile(docx.toFile())) {
+            return new String(z.getInputStream(z.getEntry("word/document.xml")).readAllBytes(),
+                    java.nio.charset.StandardCharsets.UTF_8);
+        }
+    }
+
+    private static int countRows(String xml) {
+        return xml.split("<w:tr[ >]", -1).length - 1;
+    }
+
+    private static String rowOf(String xml, String text) {
+        int p = xml.indexOf(text);
+        assertTrue(p >= 0, "未找到文本:" + text);
+        return xml.substring(xml.lastIndexOf("<w:tr ", p), xml.indexOf("</w:tr>", p) + 7);
+    }
+
+    private static String colWidths(String rowXml) {
+        return java.util.regex.Pattern.compile("<w:tcW [^>]*/>")
+                .matcher(rowXml).results().map(java.util.regex.MatchResult::group)
+                .collect(java.util.stream.Collectors.joining(","));
     }
 
     /** 复制 hx_change.docx 并破坏 document.xml(删首个表格闭合标签) */

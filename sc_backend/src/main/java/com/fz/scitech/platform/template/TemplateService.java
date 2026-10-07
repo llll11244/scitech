@@ -21,6 +21,7 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -197,10 +198,95 @@ public class TemplateService {
 
     /** poi-tl 渲染到目标 docx(显式数据模型;N3 RenderModelBuilder 组装后走此口径) */
     public void renderDocx(String tplType, File templateFile, File outDocx, Map<String, Object> data) throws Exception {
-        try (FileInputStream in = new FileInputStream(templateFile);
+        File expanded = expandDynamicRows(templateFile, data);
+        try (InputStream in = new FileInputStream(expanded != null ? expanded : templateFile);
              java.io.FileOutputStream out = new java.io.FileOutputStream(outDocx)) {
             XWPFTemplate template = XWPFTemplate.compile(in).render(data);
             template.writeAndClose(out);
+        } finally {
+            if (expanded != null) {
+                cleanup(expanded.toPath());
+            }
+        }
+    }
+
+    /** {{m10name}} 类"前缀+行号+字段"固定行占位符 */
+    private static final Pattern ROW_TAG = Pattern.compile("\\{\\{([A-Za-z]+)(\\d+)(\\w+)\\}\\}");
+    private static final String W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+
+    /**
+     * 动态行扩行(2026-10-07 决策):固定占位符行预置数=模板原版排版(登记 m1-m10/验收 m1-m8、s1-s5);
+     * 数据条数超出预置时,克隆该组末行(CTRow 深拷贝,版式/字体/行高与源行完全一致)插到组末,
+     * 占位符行号顺延改号,落临时模板供 poi-tl 渲染;未超预置返回 null——模板原样渲染,尾部空行保留。
+     * 契约:数据条数按 {prefix}{i}name 从 1 起"连续非空"计数(首个空/缺失即止),
+     * 调用方须连续平铺(RenderModelBuilder/putFixedRows 语义),尾部不足行填空串即空行。
+     * 不用 poi-tl 行循环(踩坑#5:vMerge 大表删行 XmlValueDisconnectedException)。
+     */
+    private File expandDynamicRows(File templateFile, Map<String, Object> data) throws Exception {
+        try (org.apache.poi.xwpf.usermodel.XWPFDocument doc =
+                     new org.apache.poi.xwpf.usermodel.XWPFDocument(new FileInputStream(templateFile))) {
+            boolean changed = false;
+            for (org.apache.poi.xwpf.usermodel.XWPFTable table : doc.getTables()) {
+                // 按 prefix 找各组"最大行号"所在行(该组末行=克隆源)
+                Map<String, int[]> groupLast = new LinkedHashMap<>();
+                List<org.apache.poi.xwpf.usermodel.XWPFTableRow> rows = table.getRows();
+                for (int r = 0; r < rows.size(); r++) {
+                    StringBuilder sb = new StringBuilder();
+                    for (org.apache.poi.xwpf.usermodel.XWPFTableCell cell : rows.get(r).getTableCells()) {
+                        sb.append(cell.getText());
+                    }
+                    Matcher m = ROW_TAG.matcher(sb);
+                    while (m.find()) {
+                        int no = Integer.parseInt(m.group(2));
+                        int[] cur = groupLast.get(m.group(1));
+                        if (cur == null || no > cur[0]) {
+                            groupLast.put(m.group(1), new int[]{no, r});
+                        }
+                    }
+                }
+                // 组间从后往前处理:前面组插入的行不推移后面组的索引(验收表 m/s 同表共存)
+                List<Map.Entry<String, int[]>> ordered = new ArrayList<>(groupLast.entrySet());
+                ordered.sort((a, b) -> Integer.compare(b.getValue()[1], a.getValue()[1]));
+                for (Map.Entry<String, int[]> e : ordered) {
+                    String prefix = e.getKey();
+                    int preset = e.getValue()[0];
+                    int origIdx = e.getValue()[1];
+                    int n = 0;
+                    while (data.get(prefix + (n + 1) + "name") instanceof String s && !s.isBlank()) {
+                        n++;
+                    }
+                    // 始终从原末行拷贝(占位符行号=预置数),插到 origIdx+extra;源行内容不含其他行号,改号无歧义
+                    for (int target = preset + 1; target <= n; target++) {
+                        org.openxmlformats.schemas.wordprocessingml.x2006.main.CTRow newTr =
+                                table.getCTTbl().insertNewTr(origIdx + (target - preset));
+                        newTr.set((org.apache.xmlbeans.XmlObject) table.getCTTbl().getTrArray(origIdx).copy());
+                        renumberTags(newTr, "{{" + prefix + preset, "{{" + prefix + target);
+                        changed = true;
+                    }
+                }
+            }
+            if (!changed) {
+                return null;
+            }
+            Path tmp = Files.createTempFile("tpl-expand-", ".docx");
+            try (java.io.FileOutputStream fos = new java.io.FileOutputStream(tmp.toFile())) {
+                doc.write(fos);
+            }
+            return tmp.toFile();
+        }
+    }
+
+    /** 克隆行内占位符改号:XmlCursor 只原地改 w:t 文本值、不移动节点,规避踩坑#5 的结构破坏 */
+    private static void renumberTags(org.openxmlformats.schemas.wordprocessingml.x2006.main.CTRow row,
+                                     String from, String to) {
+        try (org.apache.xmlbeans.XmlCursor cur = row.newCursor()) {
+            cur.selectPath("declare namespace w='" + W_NS + "' .//w:t");
+            while (cur.toNextSelection()) {
+                String t = cur.getTextValue();
+                if (t.contains(from)) {
+                    cur.setTextValue(t.replace(from, to));
+                }
+            }
         }
     }
 
