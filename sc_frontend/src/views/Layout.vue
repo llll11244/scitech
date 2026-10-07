@@ -17,6 +17,10 @@
             <span>消息通知</span>
             <el-badge v-if="unread > 0" :value="unread" :max="99" class="menu-badge" />
           </el-menu-item>
+          <el-menu-item index="/hx">
+            <el-icon><Folder /></el-icon>
+            <span>横向项目</span>
+          </el-menu-item>
         </template>
         <!-- 科技处端(N4 起挂横向审批/字典/备份) -->
         <template v-else>
@@ -24,6 +28,10 @@
             <el-icon><Bell /></el-icon>
             <span>消息通知</span>
             <el-badge v-if="unread > 0" :value="unread" :max="99" class="menu-badge" />
+          </el-menu-item>
+          <el-menu-item v-if="userStore.isAdmin" index="/hx">
+            <el-icon><Folder /></el-icon>
+            <span>横向项目</span>
           </el-menu-item>
           <el-menu-item v-if="userStore.isAdmin" index="/template">
             <el-icon><Files /></el-icon>

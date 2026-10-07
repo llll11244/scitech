@@ -1,10 +1,13 @@
 package com.fz.scitech.hx;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fz.scitech.common.Result;
 import com.fz.scitech.hx.dto.AcceptanceSaveDTO;
 import com.fz.scitech.hx.dto.ChangeSaveDTO;
 import com.fz.scitech.hx.dto.FlowDetailVO;
 import com.fz.scitech.hx.dto.RegisterSaveDTO;
+import com.fz.scitech.system.entity.SysUser;
+import com.fz.scitech.system.mapper.SysUserMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -18,6 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -30,9 +34,36 @@ import java.util.Map;
 public class HxController {
 
     private final HxService hxService;
+    private final SysUserMapper userMapper;
 
-    public HxController(HxService hxService) {
+    public HxController(HxService hxService, SysUserMapper userMapper) {
         this.hxService = hxService;
+        this.userMapper = userMapper;
+    }
+
+    /**
+     * 用户简单搜索(登录可查):变更负责人 el-select 远程搜索用。
+     * 按用户名/姓名 LIKE,启用账号,至多 20 条;只回 id/username/name 三列,不泄露其余资料。
+     */
+    @GetMapping("/leaders")
+    public Result<List<Map<String, Object>>> leaders(@RequestParam(required = false) String q) {
+        List<Map<String, Object>> rows = new java.util.ArrayList<>();
+        if (q == null || q.isBlank()) {
+            return Result.ok(rows);
+        }
+        String kw = q.trim();
+        for (SysUser u : userMapper.selectList(new LambdaQueryWrapper<SysUser>()
+                .eq(SysUser::getStatus, 1)
+                .and(w -> w.like(SysUser::getUsername, kw).or().like(SysUser::getRealName, kw))
+                .orderByAsc(SysUser::getId)
+                .last("limit 20"))) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", u.getId());
+            m.put("username", u.getUsername());
+            m.put("name", u.getRealName());
+            rows.add(m);
+        }
+        return Result.ok(rows);
     }
 
     /** 登记草稿保存(flowId 空=新建,非空=整体覆盖) */

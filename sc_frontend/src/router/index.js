@@ -23,8 +23,43 @@ const routes = [
         name: 'TemplateManage',
         component: () => import('../views/platform/TemplateManage.vue'),
         meta: { title: '模板管理', roles: ['admin'] }
+      },
+      /* ==== N3 教师端横向项目(teacher+admin) ==== */
+      {
+        path: 'hx',
+        name: 'MyProjects',
+        component: () => import('../views/hx/MyProjects.vue'),
+        meta: { title: '横向项目', roles: ['teacher', 'admin'] }
+      },
+      {
+        path: 'hx/register',
+        name: 'RegisterWizard',
+        component: () => import('../views/hx/RegisterWizard.vue'),
+        meta: { title: '项目登记', roles: ['teacher', 'admin'] }
+      },
+      {
+        path: 'hx/register/:flowId',
+        component: () => import('../views/hx/RegisterWizard.vue'),
+        meta: { title: '项目登记', roles: ['teacher', 'admin'] }
+      },
+      {
+        path: 'hx/change',
+        name: 'ChangeForm',
+        component: () => import('../views/hx/ChangeForm.vue'),
+        meta: { title: '项目变更', roles: ['teacher', 'admin'] }
+      },
+      {
+        path: 'hx/acceptance',
+        name: 'AcceptanceForm',
+        component: () => import('../views/hx/AcceptanceForm.vue'),
+        meta: { title: '项目验收', roles: ['teacher', 'admin'] }
+      },
+      {
+        path: 'hx/flow/:flowId',
+        name: 'FlowDetail',
+        component: () => import('../views/hx/FlowDetail.vue'),
+        meta: { title: '流程详情', roles: ['teacher', 'admin'] }
       }
-      /* ==== 模块路由按阶段注册:N2 模板管理 / N3 教师端横向 / N4 科技处端 ==== */
     ]
   }
 ]
