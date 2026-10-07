@@ -1,6 +1,11 @@
 <template>
   <div v-loading="loading" class="flow-detail">
     <template v-if="d">
+      <!-- 退回意见醒目提示(spec §7.1:退回意见醒目) -->
+      <el-alert v-if="d.flow.status === 4 && rejectOpinion" type="error" :closable="false" class="mb"
+        :title="`已被科技处退回:${rejectOpinion.actionLabel}`"
+        :description="`${rejectOpinion.opinion}(重交后原盖章件作废,需重新盖章回扫;可先修改数据再重交)`" />
+
       <!-- 状态头 -->
       <el-card shadow="never" class="mb">
         <div class="head-bar">
@@ -38,6 +43,9 @@
                 </el-descriptions-item>
                 <el-descriptions-item v-if="d.flow.newEndDate" label="变更后结束时间" :span="2">
                   {{ String(d.flow.newEndDate).slice(0, 10) }}
+                </el-descriptions-item>
+                <el-descriptions-item v-if="d.newLeaderName" label="变更后负责人" :span="2">
+                  {{ d.newLeaderName }}
                 </el-descriptions-item>
                 <el-descriptions-item label="变更原因" :span="2">{{ d.flow.changeReason || '—' }}</el-descriptions-item>
               </template>
@@ -87,6 +95,20 @@
                   下载 PDF
                 </el-button>
               </div>
+              <!-- 终版:验收确认(status=3)后归档,spec §6.2 -->
+              <template v-if="d.flow.flowType === 'acceptance' && d.flow.status === 3">
+                <div class="final-title">终版(验收确认后生成)</div>
+                <div class="deliver-row" v-for="doc in deliverDocs" :key="'f' + doc.type">
+                  <span class="doc-name">{{ doc.label }}</span>
+                  <el-button size="small" type="success" @click="download(doc, 'docx', true)">
+                    下载 Word
+                  </el-button>
+                  <el-button v-if="pdfVisible" size="small" type="success" plain
+                    @click="download(doc, 'pdf', true)">
+                    下载 PDF
+                  </el-button>
+                </div>
+              </template>
             </template>
             <el-empty v-else description="提交后生成待签 Word/PDF" :image-size="70" />
           </el-card>
@@ -136,6 +158,8 @@
                 撤回(回已提交)
               </el-button>
               <el-button v-if="d.flow.status === 4" type="primary" @click="editEntry">修改重交</el-button>
+              <!-- 不改数据直接重交(4→1,旧待签+扫描件作废,spec §3.2) -->
+              <el-button v-if="d.flow.status === 4" @click="doResubmit">直接重交</el-button>
               <el-button @click="$router.push('/hx')">返回列表</el-button>
             </div>
           </el-card>
@@ -149,7 +173,10 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { downloadAttachment, downloadDeliver, flowDetail, listDepts, uploadScan, withdraw } from '../../api/hx'
+import {
+  downloadAttachment, downloadDeliver, downloadDeliverFinal, flowDetail, listDepts, resubmit,
+  uploadScan, withdraw
+} from '../../api/hx'
 
 const route = useRoute()
 const router = useRouter()
@@ -160,7 +187,10 @@ const deptName = ref('')     // 详情未带 deptName 时的兜底(按 deptId �
 const scanDocType = ref('')
 const scanning = ref(false)
 
-const ACTION_LABEL = { submit: '提交', withdraw: '撤回', upload_scan: '上传扫描件', resubmit: '重新提交' }
+const ACTION_LABEL = {
+  submit: '提交', withdraw: '撤回', upload_scan: '上传扫描件', resubmit: '重新提交',
+  approve: '审批通过', verify: '验收通过', reject: '退回', precheck_reject: '盖章前预检退回'
+}
 
 /** 流程类型对应允许的扫描件类型(与后端 validateScanDocType 同口径) */
 const SCAN_DOC_ALLOW = {
@@ -206,6 +236,14 @@ const deliverDocs = computed(() => {
 const fmtMoney = (v) => (v === null || v === undefined ? '—' : Number(v).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
 const fmtTime = (t) => (t || '').replace('T', ' ').slice(0, 16)
 
+/** 退回态:最近一条退回留痕意见(records 已倒序=最新在前,醒目提示用) */
+const rejectOpinion = computed(() => {
+  const rs = (d.value?.records || []).filter((r) => r.action === 'reject' || r.action === 'precheck_reject')
+  const last = rs[0]
+  if (!last) return null
+  return { opinion: last.opinion || '', actionLabel: ACTION_LABEL[last.action] || '退回' }
+})
+
 async function load() {
   loading.value = true
   try {
@@ -220,14 +258,16 @@ async function load() {
   }
 }
 
-/** 下载待签件:经 axios 附 token,前端拼文件名 */
-async function download(doc, kind) {
+/** 下载待签/终版件:经 axios 附 token,前端拼文件名(final=终版下载) */
+async function download(doc, kind, final = false) {
   try {
-    const blob = await downloadDeliver(flowId.value, kind, doc.type || undefined)
+    const blob = final
+      ? await downloadDeliverFinal(flowId.value, kind, doc.type || undefined)
+      : await downloadDeliver(flowId.value, kind, doc.type || undefined)
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `${d.value.project?.name || '横向项目'}_${doc.label}.${kind}`
+    a.download = `${d.value.project?.name || '横向项目'}_${doc.label}${final ? '_终版' : ''}.${kind}`
     a.click()
     URL.revokeObjectURL(url)
   } catch (e) {
@@ -288,6 +328,22 @@ async function doWithdraw(msg) {
   try {
     await withdraw(flowId.value)
     ElMessage.success('已撤回')
+    await load()
+  } catch (e) {
+    /* 拦截器已提示 */
+  }
+}
+
+/** 退回单不改数据直接重交(4→1):重渲待签双出,旧待签+旧扫描件作废(spec §3.2) */
+async function doResubmit() {
+  try {
+    await ElMessageBox.confirm(
+      '直接重交将按当前数据重新生成待签文件,原盖章件作废(需重新盖章回扫),确定重交?',
+      '提示', { type: 'warning' })
+  } catch { return }
+  try {
+    await resubmit(flowId.value)
+    ElMessage.success('已重交,请下载待签 Word 打印盖章')
     await load()
   } catch (e) {
     /* 拦截器已提示 */
@@ -401,5 +457,14 @@ export default { name: 'FlowDetail' }
   font-size: 12px;
   color: #909399;
   line-height: 1.6;
+}
+
+.final-title {
+  margin: 10px 0 2px;
+  padding-top: 8px;
+  border-top: 1px solid #ebeef5;
+  font-size: 13px;
+  font-weight: 600;
+  color: #67c23a;
 }
 </style>

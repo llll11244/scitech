@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS sys_user (
   title VARCHAR(32) DEFAULT NULL COMMENT '职称(字典)',
   degree VARCHAR(32) DEFAULT NULL COMMENT '学位(字典)',
   status TINYINT DEFAULT 1 COMMENT '1启用 0停用',
+  last_login DATETIME DEFAULT NULL COMMENT '最近登录时间(Task26 用户管理)',
   create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
   update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   create_by VARCHAR(64) DEFAULT NULL,
@@ -27,6 +28,16 @@ CREATE TABLE IF NOT EXISTS sys_user (
   PRIMARY KEY (id),
   UNIQUE KEY uk_username (username)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户表';
+
+-- Task26(2026-10-08):老库补 last_login 列(MySQL 无 ADD COLUMN IF NOT EXISTS,
+-- information_schema 判存+动态 SQL 幂等;新库由上方 CREATE TABLE 直接建出)
+SET @col = (SELECT IF(COUNT(*) = 0,
+  'ALTER TABLE sys_user ADD COLUMN last_login DATETIME DEFAULT NULL COMMENT ''最近登录时间(Task26 用户管理)'' AFTER status',
+  'SELECT 1') FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'sys_user' AND COLUMN_NAME = 'last_login');
+PREPARE stmt FROM @col;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 CREATE TABLE IF NOT EXISTS sys_dept (
   id BIGINT NOT NULL AUTO_INCREMENT,

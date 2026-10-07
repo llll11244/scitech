@@ -45,6 +45,7 @@ public class AuthController {
             throw new BizException("账号已停用,请联系管理员");
         }
         loginGuard.reset(req.getUsername());
+        userService.recordLogin(user.getId());   // 最近登录留痕(Task26 用户管理)
 
         return Result.ok(LoginVO.builder()
                 .token(jwtUtil.create(user.getId(), user.getUsername(), user.getRole()))

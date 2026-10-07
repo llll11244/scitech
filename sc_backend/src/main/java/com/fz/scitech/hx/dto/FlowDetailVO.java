@@ -16,4 +16,5 @@ public class FlowDetailVO {
     private List<RpAttachment> attachments; // 仅生效件(deleted=0,作废件查不出=设计§3.2"保留文件不入列表")
     private List<RpHxFlowRecord> records;
     private String deliverPdfVisible;       // sys_config 读数,前端显隐 PDF 入口
+    private String newLeaderName;           // 变更单回显:变更后负责人姓名(按 new_leader_id 查 sys_user,N4 Task26)
 }

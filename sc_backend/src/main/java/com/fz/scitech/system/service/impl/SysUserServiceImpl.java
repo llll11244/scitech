@@ -25,4 +25,11 @@ public class SysUserServiceImpl implements SysUserService {
     public SysUser getById(Long id) {
         return userMapper.selectById(id);
     }
+
+    @Override
+    public void recordLogin(Long userId) {
+        userMapper.update(null, Wrappers.<SysUser>lambdaUpdate()
+                .eq(SysUser::getId, userId)
+                .set(SysUser::getLastLogin, java.time.LocalDateTime.now()));
+    }
 }

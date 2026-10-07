@@ -22,20 +22,36 @@
             <span>横向项目</span>
           </el-menu-item>
         </template>
-        <!-- 科技处端(N4 起挂横向审批/字典/备份) -->
+        <!-- 科技处端(N4 Task26:审批/项目/字典/模板/用户;备份=Task27 交付占位禁用) -->
         <template v-else>
           <el-menu-item v-if="userStore.isAdmin" index="/notify">
             <el-icon><Bell /></el-icon>
             <span>消息通知</span>
             <el-badge v-if="unread > 0" :value="unread" :max="99" class="menu-badge" />
           </el-menu-item>
-          <el-menu-item v-if="userStore.isAdmin" index="/hx">
+          <el-menu-item v-if="userStore.isAdmin" index="/admin/audit">
+            <el-icon><Stamp /></el-icon>
+            <span>横向审批</span>
+          </el-menu-item>
+          <el-menu-item v-if="userStore.isAdmin" index="/admin/projects">
             <el-icon><Folder /></el-icon>
-            <span>横向项目</span>
+            <span>项目管理</span>
+          </el-menu-item>
+          <el-menu-item v-if="userStore.isAdmin" index="/admin/dicts">
+            <el-icon><Collection /></el-icon>
+            <span>字典管理</span>
           </el-menu-item>
           <el-menu-item v-if="userStore.isAdmin" index="/template">
             <el-icon><Files /></el-icon>
             <span>模板管理</span>
+          </el-menu-item>
+          <el-menu-item v-if="userStore.isAdmin" index="/admin/users">
+            <el-icon><User /></el-icon>
+            <span>用户管理</span>
+          </el-menu-item>
+          <el-menu-item v-if="userStore.isAdmin" index="/admin/backup" disabled>
+            <el-icon><Box /></el-icon>
+            <span>数据备份(Task27 交付)</span>
           </el-menu-item>
         </template>
       </el-menu>

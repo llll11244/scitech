@@ -51,9 +51,9 @@
               <el-button v-else-if="acceptanceFlow(row)" link type="primary"
                 @click="$router.push(`/hx/flow/${acceptanceFlow(row).flowId}`)">验收单详情</el-button>
               <el-button v-else-if="row.status !== '结题'" link @click="$router.push(`/hx/acceptance?projectId=${row.projectId}`)">发起验收</el-button>
-
-              <el-button link @click="openDetail(row)">详情</el-button>
             </template>
+            <el-button link @click="$router.push(`/hx/funding?projectId=${row.projectId}`)">到账</el-button>
+            <el-button v-if="row.auditStatus >= 2" link @click="openDetail(row)">详情</el-button>
           </template>
         </el-table-column>
       </el-table>

@@ -14,4 +14,7 @@ public interface SysUserService {
 
     /** 按主键查(拦截器每请求一次,带出最新角色与状态,决策#35-②) */
     SysUser getById(Long id);
+
+    /** 登录成功留痕:更新最近登录时间(Task26 用户管理列表数据源) */
+    void recordLogin(Long userId);
 }

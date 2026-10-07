@@ -191,6 +191,25 @@ public class HxController {
     }
 
     /**
+     * 终版交付下载(Task26,spec §6.2「终版数据 PDF 归档后可看」):验收确认时渲染的终版件,
+     * 教师本人/admin 可取;biz_type=hx_final_docx/hx_final_pdf/hx_final_report_*
+     * (doc 参数推导同 stem 规则+final 前缀);仅 status=3 流程单存在(Service 层校验)。
+     */
+    @GetMapping("/{flowId}/deliver-final/docx")
+    public void deliverFinalDocx(@PathVariable Long flowId,
+                                 @RequestParam(defaultValue = "hx_acceptance") String doc,
+                                 HttpServletRequest request, HttpServletResponse response) throws IOException {
+        hxService.writeDeliver(uid(request), role(request), flowId, finalStem(doc, "docx"), true, response);
+    }
+
+    @GetMapping("/{flowId}/deliver-final/pdf")
+    public void deliverFinalPdf(@PathVariable Long flowId,
+                                @RequestParam(defaultValue = "hx_acceptance") String doc,
+                                HttpServletRequest request, HttpServletResponse response) throws IOException {
+        hxService.writeDeliver(uid(request), role(request), flowId, finalStem(doc, "pdf"), true, response);
+    }
+
+    /**
      * 附件内容下载(spec §6.2):扫描件/申报佐证等查看用。
      * 白名单 hx_scan/hx_apply/hx_extra(待签渲染件走既有 /deliver 接口,不重复开口);
      * 鉴权同流程详情:教师 owner 校验、admin 直查(Service 层)。
@@ -204,6 +223,11 @@ public class HxController {
     /** doc(模板类型)→附件 biz_type:hx_report→hx_report_docx/hx_report_pdf,其余→hx_docx/hx_pdf(与 PdfRenderService stem 同规则) */
     private String stem(String tplType, String ext) {
         return ("hx_report".equals(tplType) ? "hx_report_" : "hx_") + ext;
+    }
+
+    /** 终版 biz_type:同 stem 规则+final 段(hx_final_docx/hx_final_report_pdf,与 PdfRenderService 终版口径一致) */
+    private String finalStem(String tplType, String ext) {
+        return "hx_final" + ("hx_report".equals(tplType) ? "_report" : "") + "_" + ext;
     }
 
     private Long uid(HttpServletRequest request) {

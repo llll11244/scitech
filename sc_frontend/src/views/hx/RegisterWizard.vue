@@ -1,5 +1,9 @@
 <template>
   <div class="wizard">
+    <!-- 退回单修改重交提示 -->
+    <el-alert v-if="rejected" type="error" :closable="false" class="mb"
+      title="该登记单已被科技处退回,修改完成后点「保存并重交」;重交后原盖章件作废,需重新盖章回扫(意见见流程详情时间线)。" />
+
     <!-- 步骤条 -->
     <el-steps :active="step" simple finish-status="success" class="mb">
       <el-step title="基本信息" />
@@ -143,6 +147,23 @@
               </el-collapse-item>
             </el-collapse>
 
+            <el-divider content-position="left">合同扫描件(可选)</el-divider>
+            <el-form-item label="合同扫描件">
+              <div class="w-full">
+                <el-upload :show-file-list="false" :auto-upload="false" accept=".pdf,.png,.jpg,.jpeg"
+                  :on-change="onContractPicked">
+                  <el-button size="small" :loading="contractUploading">
+                    {{ contractFile ? '重新上传(覆盖旧件)' : '上传合同扫描件' }}
+                  </el-button>
+                </el-upload>
+                <div v-if="contractFile" class="contract-row">
+                  <span class="contract-name">{{ contractFile.fileName }}</span>
+                  <span class="contract-time">{{ fmtTime(contractFile.createTime) }}</span>
+                </div>
+                <div class="tip-txt">扫描合同或盖章页均可,pdf/图片;不随本表盖章流程,科技处审核时调阅。</div>
+              </div>
+            </el-form-item>
+
             <el-divider content-position="left">项目简介与进度</el-divider>
             <el-form-item label="项目简介">
               <div class="w-full">
@@ -176,7 +197,9 @@
           <el-button v-if="step > 0" @click="step--">上一步</el-button>
           <el-button v-if="step < 2" type="primary" @click="step++">下一步</el-button>
           <el-button v-if="step === 2" :loading="saving" @click="save">保存草稿</el-button>
-          <el-button v-if="step === 2" type="primary" :loading="submitting" @click="confirmSubmit">提交登记</el-button>
+          <el-button v-if="step === 2" type="primary" :loading="submitting" @click="confirmSubmit">
+            {{ rejected ? '保存并重交' : '提交登记' }}
+          </el-button>
         </div>
       </el-card>
 
@@ -210,7 +233,8 @@ import { onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
-  flowDetail, listDepts, listDict, previewDocx, saveRegisterDraft, submitRegister
+  flowDetail, listDepts, listDict, previewDocx, resubmit, saveRegisterDraft, submitRegister,
+  uploadContract
 } from '../../api/hx'
 import { useUserStore } from '../../stores/user'
 import DocxPane from './DocxPane.vue'
@@ -221,6 +245,7 @@ const userStore = useUserStore()
 
 const step = ref(0)
 const formRef = ref()
+const rejected = ref(false)   // 退回单(4)编辑:保存后走 resubmit 而非 submit
 
 /* ---------- 字典与院部 ---------- */
 const depts = ref([])
@@ -363,8 +388,15 @@ async function confirmSubmit() {
 async function doSubmit() {
   submitting.value = true
   try {
-    await submitRegister(form.flowId)
-    ElMessage.success('登记已提交,请下载待签 Word 打印盖章')
+    if (rejected.value) {
+      // 退回单修改重交:先存最新数据,再 4→1 重交(重渲待签,旧件作废)
+      await saveRegisterDraft(collectForm())
+      await resubmit(form.flowId)
+      ElMessage.success('已重交,请下载待签 Word 重新打印盖章')
+    } else {
+      await submitRegister(form.flowId)
+      ElMessage.success('登记已提交,请下载待签 Word 打印盖章')
+    }
     router.push(`/hx/flow/${form.flowId}`)
   } catch (e) {
     /* 拦截器已提示 */
@@ -373,15 +405,52 @@ async function doSubmit() {
   }
 }
 
+/* ---------- 合同扫描件(可选,任何状态可传,重传覆盖) ---------- */
+const contractFile = ref(null)
+const contractUploading = ref(false)
+
+const fmtTime = (t) => (t || '').replace('T', ' ').slice(0, 16)
+
+/** 详情附件中本流程单生效的合同(hx_apply/合同/apply 目录段) */
+function pickContract(attachments, fid) {
+  return (attachments || []).find((a) => a.bizType === 'hx_apply' && a.docType === '合同'
+    && (a.filePath || '').includes(`/apply/${fid}/`)) || null
+}
+
+async function onContractPicked(file) {
+  const raw = file.raw
+  if (!raw) return
+  contractUploading.value = true
+  try {
+    if (!form.flowId) {
+      // 尚未存过草稿:先落库拿 flowId 再传(合同上传挂在流程单上)
+      form.flowId = await saveRegisterDraft(collectForm())
+      if (String(route.params.flowId || '') !== String(form.flowId)) {
+        router.replace(`/hx/register/${form.flowId}`)
+      }
+    }
+    await uploadContract(form.flowId, raw)
+    const d = await flowDetail(form.flowId)
+    contractFile.value = pickContract(d.attachments, form.flowId)
+    ElMessage.success('合同扫描件已上传')
+  } catch (e) {
+    /* 拦截器已提示 */
+  } finally {
+    contractUploading.value = false
+  }
+}
+
 /* ---------- 草稿回填 ---------- */
 async function loadDraft(flowId) {
   const d = await flowDetail(flowId)
-  if (d.flow.status !== 0) {
-    // 非草稿不可编辑,转流程详情查看
+  if (d.flow.status !== 0 && d.flow.status !== 4) {
+    // 非草稿/退回单不可编辑,转流程详情查看
     router.replace(`/hx/flow/${flowId}`)
     return
   }
+  rejected.value = d.flow.status === 4
   form.flowId = d.flow.id
+  contractFile.value = pickContract(d.attachments, d.flow.id)
   form.name = d.project.name
   form.leaderName = d.project.leaderName
   form.deptId = d.project.deptId
@@ -547,5 +616,29 @@ export default { name: 'RegisterWizard' }
   font-size: 13px;
   color: #909399;
   line-height: 1.8;
+}
+
+.contract-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+  font-size: 13px;
+}
+
+.contract-name {
+  color: #303133;
+}
+
+.contract-time {
+  color: #909399;
+  font-size: 12px;
+}
+
+.tip-txt {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #909399;
+  line-height: 1.6;
 }
 </style>

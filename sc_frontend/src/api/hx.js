@@ -67,3 +67,48 @@ export const downloadDeliver = (flowId, kind = 'docx', doc) =>
 /** 扫描件/申报佐证附件内容下载(blob;白名单 hx_scan/hx_apply/hx_extra,后端 owner/admin 鉴权) */
 export const downloadAttachment = (id) =>
   request.get(`/hx/attachment/${id}/download`, { responseType: 'blob', timeout: 60000 })
+
+/* ==================== N4 科技处端接口(Task26) ==================== */
+
+/* ---------- 审批(admin,spec §6.3) ---------- */
+/** 审批列表:flowType/status 可选过滤 → [{flowId,projectId,flowType,status,name,leaderName,deptName,…}] */
+export const auditList = (params) => request.get('/hx/audit', { params })
+/** 通过:验收流程须传 verifiedAmount(核定到账,元) */
+export const reviewFlow = (flowId, verifiedAmount) =>
+  request.post(`/hx/${flowId}/review`, verifiedAmount === undefined ? {} : { verifiedAmount })
+/** 退回:意见必填;isPrecheck 仅 status=1 可选(盖章前预检,前端守语义) */
+export const rejectFlow = (flowId, opinion, isPrecheck = false) =>
+  request.post(`/hx/${flowId}/reject`, { opinion, isPrecheck })
+/** 教师退回单修改重交(4→1,旧待签+扫描件作废) */
+export const resubmit = (flowId) => request.post(`/hx/${flowId}/resubmit`)
+
+/* ---------- 项目管理+到账(admin,spec §6.3/§4.8) ---------- */
+/** 全部横向项目聚合(九列+到账累计+执行状态+在途流程单) */
+export const projectList = () => request.get('/hx/projects')
+/** 到账明细+累计(admin 按项目查) */
+export const adminFunding = (projectId) => request.get('/hx/funding', { params: { projectId } })
+/** 录入到账(元;录入即通知教师) */
+export const addFunding = (data) => request.post('/hx/funding', data)
+/** 删到账(逻辑删,累计实时回落) */
+export const deleteFunding = (id) => request.delete(`/hx/funding/${id}`)
+/** 教师到账只读(本人项目强制)→ {records,total} */
+export const teacherFunding = (projectId) => request.get(`/hx/${projectId}/funding`)
+
+/* ---------- 合同附件(教师,登记第三步可选上传) ---------- */
+export const uploadContract = (flowId, file, docType = '合同') => {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('docType', docType)
+  return request.post(`/hx/${flowId}/attach`, form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 60000
+  })
+}
+
+/* ---------- 终版交付下载(验收确认后归档件,教师本人/admin) ---------- */
+export const downloadDeliverFinal = (flowId, kind = 'docx', doc) =>
+  request.get(`/hx/${flowId}/deliver-final/${kind}`, {
+    params: doc ? { doc } : {},
+    responseType: 'blob',
+    timeout: 60000
+  })

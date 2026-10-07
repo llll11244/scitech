@@ -59,6 +59,43 @@ const routes = [
         name: 'FlowDetail',
         component: () => import('../views/hx/FlowDetail.vue'),
         meta: { title: '流程详情', roles: ['teacher', 'admin'] }
+      },
+      {
+        path: 'hx/funding',
+        name: 'FundingView',
+        component: () => import('../views/hx/FundingView.vue'),
+        meta: { title: '到账明细', roles: ['teacher', 'admin'] }
+      },
+      /* ==== N4 科技处端(admin 六页,Task26;备份页 Task27 交付暂不设路由) ==== */
+      {
+        path: 'admin/audit',
+        name: 'AuditList',
+        component: () => import('../views/admin/AuditList.vue'),
+        meta: { title: '横向审批', roles: ['admin'] }
+      },
+      {
+        path: 'admin/audit/:flowId',
+        name: 'AuditDetail',
+        component: () => import('../views/admin/AuditDetail.vue'),
+        meta: { title: '审批详情', roles: ['admin'] }
+      },
+      {
+        path: 'admin/projects',
+        name: 'ProjectManage',
+        component: () => import('../views/admin/ProjectManage.vue'),
+        meta: { title: '项目管理', roles: ['admin'] }
+      },
+      {
+        path: 'admin/dicts',
+        name: 'DictManage',
+        component: () => import('../views/admin/DictManage.vue'),
+        meta: { title: '字典管理', roles: ['admin'] }
+      },
+      {
+        path: 'admin/users',
+        name: 'UserManage',
+        component: () => import('../views/admin/UserManage.vue'),
+        meta: { title: '用户管理', roles: ['admin'] }
       }
     ]
   }

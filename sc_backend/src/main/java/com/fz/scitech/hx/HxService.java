@@ -653,6 +653,11 @@ public class HxService {
         vo.setRecords(recordMapper.selectList(new LambdaQueryWrapper<RpHxFlowRecord>()
                 .eq(RpHxFlowRecord::getFlowId, flowId).orderByAsc(RpHxFlowRecord::getId)));
         vo.setDeliverPdfVisible(readConfig("deliver_pdf_visible"));
+        // 变更单回显:变更后负责人姓名(N4 Task26,N3 缓期项——审批对照/教师端展示用)
+        if (flow.getNewLeaderId() != null) {
+            SysUser newLeader = userMapper.selectById(flow.getNewLeaderId());
+            vo.setNewLeaderName(newLeader == null ? null : newLeader.getRealName());
+        }
         return vo;
     }
 
@@ -751,11 +756,25 @@ public class HxService {
         return hx;
     }
 
-    // ---------- 待签交付下载 ----------
+    // ---------- 待签/终版交付下载 ----------
     /** 该流程单最新生效待签件(docx 主交付/pdf 隐藏副产物)流式写响应;不存在抛业务异常 */
     public void writeDeliver(Long uid, String role, Long flowId, String bizType,
                              HttpServletResponse response) throws IOException {
+        writeDeliver(uid, role, flowId, bizType, false, response);
+    }
+
+    /**
+     * 交付下载泛化(N4 Task26 终版):finalVersion=true 查终版件(hx_final_*,
+     * 验收确认时渲染,spec §6.2「终版数据 PDF 归档后可看」),仅 status=3 流程单存在——
+     * 未通过的单前置拒(终版语义提示),已通过但查不到=未验收确认即无终版。
+     * 目录与待签同前缀(终版仅文件名带 final_ 段),故路径定位逻辑复用。
+     */
+    public void writeDeliver(Long uid, String role, Long flowId, String bizType, boolean finalVersion,
+                             HttpServletResponse response) throws IOException {
         RpHxFlow flow = accessibleFlow(uid, role, flowId);
+        if (finalVersion && flow.getStatus() != HxFlowStatus.APPROVED) {
+            throw new BizException("终版文件在验收确认后生成,该流程单未通过");
+        }
         RpAttachment att = attachmentMapper.selectList(new LambdaQueryWrapper<RpAttachment>()
                         .eq(RpAttachment::getProjectId, flow.getProjectId())
                         .eq(RpAttachment::getBizType, bizType)
@@ -765,11 +784,12 @@ public class HxService {
                         .last("limit 1"))
                 .stream().findFirst().orElse(null);
         if (att == null) {
-            throw new BizException("待签文件不存在(未提交生成或已作废)");
+            throw new BizException(finalVersion
+                    ? "终版文件不存在(未验收确认或已作废)" : "待签文件不存在(未提交生成或已作废)");
         }
         File f = new File(uploadDir, att.getFilePath());
         if (!f.exists()) {
-            throw new BizException("待签文件已缺失:" + att.getFilePath());
+            throw new BizException((finalVersion ? "终版文件" : "待签文件") + "已缺失:" + att.getFilePath());
         }
         response.setContentType(bizType.endsWith("pdf") ? MediaType.APPLICATION_PDF_VALUE : DOCX_MIME);
         response.setHeader("Content-Disposition", "inline; filename=" + att.getFileName());

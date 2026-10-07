@@ -122,7 +122,9 @@
 
         <div class="actions">
           <el-button :loading="saving" @click="save">保存草稿</el-button>
-          <el-button type="primary" :loading="submitting" @click="confirmSubmit">提交验收</el-button>
+          <el-button type="primary" :loading="submitting" @click="confirmSubmit">
+            {{ rejected ? '保存并重交' : '提交验收' }}
+          </el-button>
         </div>
       </el-card>
 
@@ -163,13 +165,14 @@ import { onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
-  flowDetail, listDict, myProjects, previewDocx, saveAcceptanceDraft, submitAcceptance
+  flowDetail, listDict, myProjects, previewDocx, resubmit, saveAcceptanceDraft, submitAcceptance
 } from '../../api/hx'
 import DocxPane from './DocxPane.vue'
 
 const route = useRoute()
 const router = useRouter()
 const formRef = ref()
+const rejected = ref(false)   // 退回单(4)编辑:保存后走 resubmit 而非 submit
 
 const acceptableProjects = ref([]) // 在研且尚无验收单
 const dictOutcomeForm = ref([])
@@ -326,8 +329,14 @@ async function confirmSubmit() {
 async function doSubmit() {
   submitting.value = true
   try {
-    await submitAcceptance(form.flowId)
-    ElMessage.success('验收单已提交,请下载待签 Word(验收登记表+验收报告)打印盖章')
+    if (rejected.value) {
+      await saveAcceptanceDraft(collectForm())
+      await resubmit(form.flowId)
+      ElMessage.success('已重交,请下载待签 Word(两张)重新打印盖章')
+    } else {
+      await submitAcceptance(form.flowId)
+      ElMessage.success('验收单已提交,请下载待签 Word(验收登记表+验收报告)打印盖章')
+    }
     router.push(`/hx/flow/${form.flowId}`)
   } catch (e) {
     /* 拦截器已提示 */
@@ -336,13 +345,14 @@ async function doSubmit() {
   }
 }
 
-/* ---------- 草稿回填(?flowId=继续填报) ---------- */
+/* ---------- 草稿回填(?flowId=继续填报/退回单修改) ---------- */
 async function loadDraft(flowId) {
   const d = await flowDetail(flowId)
-  if (d.flow.status !== 0) {
+  if (d.flow.status !== 0 && d.flow.status !== 4) {
     router.replace(`/hx/flow/${flowId}`)
     return
   }
+  rejected.value = d.flow.status === 4
   form.flowId = d.flow.id
   form.projectId = d.flow.projectId
   form.usedAmount = d.flow.usedAmount

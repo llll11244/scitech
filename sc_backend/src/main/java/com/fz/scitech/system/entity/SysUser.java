@@ -38,6 +38,9 @@ public class SysUser {
     /** 1 启用 0 停用 */
     private Integer status;
 
+    /** 最近登录时间(登录成功时更新,用户管理列表展示;Task26) */
+    private LocalDateTime lastLogin;
+
     private LocalDateTime createTime;
 
     private LocalDateTime updateTime;
