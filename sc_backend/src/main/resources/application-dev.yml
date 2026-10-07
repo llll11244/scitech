@@ -1,0 +1,12 @@
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/scitech_db?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: root
+    password: Research@2026
+  # 建表与字典初值:schema.sql 带 IF NOT EXISTS、data.sql 先删后插,均幂等,可每次启动执行
+  sql:
+    init:
+      mode: always
+sc:
+  cors-origin: http://localhost:5173

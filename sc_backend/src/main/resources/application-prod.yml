@@ -1,0 +1,14 @@
+# 生产配置:全部敏感项走环境变量,文件内不含任何真实密码
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${DB_URL}
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+  sql:
+    init:
+      mode: always
+sc:
+  cors-origin: ${SC_CORS_ORIGIN}
+  jwt:
+    secret: ${SC_JWT_SECRET}

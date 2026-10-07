@@ -1,0 +1,22 @@
+spring:
+  profiles:
+    active: dev
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 60MB
+server:
+  port: 8080
+mybatis-plus:
+  global-config:
+    db-config:
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+sc:
+  upload-dir: ./upload
+  backup-dir: ./backup
+  office-home: ./libreoffice
+  jwt:
+    secret: ${SC_JWT_SECRET:fz-scitech-dev-secret-2026-please-override}
+    expire-hours: 12
