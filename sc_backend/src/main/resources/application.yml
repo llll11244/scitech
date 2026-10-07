@@ -7,6 +7,8 @@ spring:
       max-request-size: 60MB
 server:
   port: 8080
+  servlet:
+    context-path: /api
 mybatis-plus:
   global-config:
     db-config:
