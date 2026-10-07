@@ -18,9 +18,22 @@ request.interceptors.request.use((config) => {
 
 // 响应拦截:统一处理业务码与 401
 request.interceptors.response.use(
-  (response) => {
-    // blob 响应(文件下载)直接返回,不走业务码判断
+  async (response) => {
+    // blob 响应(文件下载/预览)直接返回;但后端业务异常走 HTTP 200+JSON(Result),
+    // 此时拿到的是 application/json 的 Blob——解析出业务码按错误处理,防止把 JSON 存成 .docx
     if (response.config.responseType === 'blob') {
+      if (response.data && response.data.type === 'application/json') {
+        const text = await response.data.text()
+        try {
+          const res = JSON.parse(text)
+          if (res.code !== 0) {
+            ElMessage.error(res.msg || '请求失败')
+            return Promise.reject(new Error(res.msg))
+          }
+        } catch (e) {
+          // 非 Result 结构的 JSON(理论不会出现),原样放行
+        }
+      }
       return response.data
     }
     const res = response.data

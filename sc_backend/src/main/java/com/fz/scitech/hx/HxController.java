@@ -163,6 +163,17 @@ public class HxController {
         hxService.writeDeliver(uid(request), role(request), flowId, stem(doc, "pdf"), response);
     }
 
+    /**
+     * 附件内容下载(spec §6.2):扫描件/申报佐证等查看用。
+     * 白名单 hx_scan/hx_apply/hx_extra(待签渲染件走既有 /deliver 接口,不重复开口);
+     * 鉴权同流程详情:教师 owner 校验、admin 直查(Service 层)。
+     */
+    @GetMapping("/attachment/{id}/download")
+    public void downloadAttachment(@PathVariable Long id, HttpServletRequest request,
+                                   HttpServletResponse response) throws IOException {
+        hxService.writeAttachment(uid(request), role(request), id, response);
+    }
+
     /** doc(模板类型)→附件 biz_type:hx_report→hx_report_docx/hx_report_pdf,其余→hx_docx/hx_pdf(与 PdfRenderService stem 同规则) */
     private String stem(String tplType, String ext) {
         return ("hx_report".equals(tplType) ? "hx_report_" : "hx_") + ext;

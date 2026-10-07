@@ -59,6 +59,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.stream.Collectors;
 
 /**
@@ -714,6 +716,49 @@ public class HxService {
         try (InputStream in = new FileInputStream(f)) {
             in.transferTo(response.getOutputStream());
         }
+    }
+
+    /**
+     * 附件内容下载(spec §6.2 教师端 GET /hx/attachment/{id}/download):
+     * 仅 hx_scan/hx_apply/hx_extra 白名单——待签渲染件(hx_docx/hx_pdf/hx_report_*)走既有 writeDeliver,
+     * 不重复开口;教师按附件→项目做 owner 校验(同 accessibleFlow 防线),admin 直查。
+     */
+    public void writeAttachment(Long uid, String role, Long attachmentId, HttpServletResponse response) throws IOException {
+        RpAttachment att = attachmentMapper.selectById(attachmentId);
+        if (att == null) {
+            throw new BizException("附件不存在");
+        }
+        if (!List.of("hx_scan", "hx_apply", "hx_extra").contains(att.getBizType())) {
+            throw new BizException("该附件类型不支持直接下载");
+        }
+        if (!"admin".equals(role)) {
+            RpProject p = projectMapper.selectById(att.getProjectId());
+            if (p == null || !uid.equals(p.getApplyUserId())) {
+                throw new BizException("无权访问该附件");
+            }
+        }
+        File f = new File(uploadDir, att.getFilePath());
+        if (!f.exists()) {
+            throw new BizException("附件文件已缺失:" + att.getFilePath());
+        }
+        response.setContentType(contentType(att.getFileName()));
+        response.setHeader("Content-Disposition", "inline; filename*=UTF-8''"
+                + URLEncoder.encode(att.getFileName(), StandardCharsets.UTF_8).replace("+", "%20"));
+        response.setContentLengthLong(f.length());
+        try (InputStream in = new FileInputStream(f)) {
+            in.transferTo(response.getOutputStream());
+        }
+    }
+
+    /** 附件 Content-Type 按扩展名(扫描件以 pdf/图片为主,兜底二进制流) */
+    private static String contentType(String fileName) {
+        return switch (ext(fileName)) {
+            case "pdf" -> MediaType.APPLICATION_PDF_VALUE;
+            case "png" -> "image/png";
+            case "jpg", "jpeg" -> "image/jpeg";
+            case "docx" -> DOCX_MIME;
+            default -> "application/octet-stream";
+        };
     }
 
     // ---------- 通用 ----------

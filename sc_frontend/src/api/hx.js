@@ -63,3 +63,7 @@ export const downloadDeliver = (flowId, kind = 'docx', doc) =>
     responseType: 'blob',
     timeout: 60000
   })
+
+/** 扫描件/申报佐证附件内容下载(blob;白名单 hx_scan/hx_apply/hx_extra,后端 owner/admin 鉴权) */
+export const downloadAttachment = (id) =>
+  request.get(`/hx/attachment/${id}/download`, { responseType: 'blob', timeout: 60000 })

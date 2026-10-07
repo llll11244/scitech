@@ -109,12 +109,14 @@
               </div>
               <div class="tip">盖章后扫描上传;重传同类型会覆盖旧件。全部要求的扫描件上传后进入科技处审核。</div>
             </template>
-            <!-- 已回扫:列表 -->
+            <!-- 已回扫:列表(查看/下载走附件内容接口) -->
             <template v-else-if="d.flow.status >= 2">
               <div v-for="a in scans" :key="a.id" class="scan-item">
                 <el-tag size="small">{{ a.docType }}</el-tag>
                 <span class="scan-name">{{ a.fileName }}</span>
                 <span class="scan-time">{{ fmtTime(a.createTime) }}</span>
+                <el-button link type="primary" size="small" @click="viewAtt(a)">查看</el-button>
+                <el-button link size="small" @click="downAtt(a)">下载</el-button>
               </div>
               <el-empty v-if="!scans.length" description="暂无扫描件" :image-size="60" />
               <div v-if="d.flow.status === 2" class="tip">已回扫,待科技处审核。如需更换盖章件,请先撤回再重新上传。</div>
@@ -147,7 +149,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { downloadDeliver, flowDetail, listDepts, uploadScan, withdraw } from '../../api/hx'
+import { downloadAttachment, downloadDeliver, flowDetail, listDepts, uploadScan, withdraw } from '../../api/hx'
 
 const route = useRoute()
 const router = useRouter()
@@ -249,6 +251,33 @@ async function onScanPicked(file) {
     /* 拦截器已提示 */
   } finally {
     scanning.value = false
+  }
+}
+
+/** 扫描件查看:新标签页内联展示(PDF/图片浏览器原生渲染) */
+async function viewAtt(a) {
+  try {
+    const blob = await downloadAttachment(a.id)
+    const url = URL.createObjectURL(blob)
+    window.open(url, '_blank')
+    setTimeout(() => URL.revokeObjectURL(url), 60000) // 延迟释放,给新标签加载留时间
+  } catch (e) {
+    /* 拦截器已提示 */
+  }
+}
+
+/** 扫描件下载:沿用附件原名 */
+async function downAtt(a) {
+  try {
+    const blob = await downloadAttachment(a.id)
+    const url = URL.createObjectURL(blob)
+    const el = document.createElement('a')
+    el.href = url
+    el.download = a.fileName || '扫描件'
+    el.click()
+    URL.revokeObjectURL(url)
+  } catch (e) {
+    /* 拦截器已提示 */
   }
 }
 
