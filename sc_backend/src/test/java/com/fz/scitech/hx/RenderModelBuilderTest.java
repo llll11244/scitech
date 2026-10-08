@@ -252,6 +252,7 @@ class RenderModelBuilderTest {
         String regXml = docXml(regOut.toPath());
         assertTrue(!regXml.contains("{{"), "登记表渲染后不应残留占位符(缺键如 m2name 应被清空)");
         assertTrue(regXml.contains("√技术开发") && regXml.contains("80000.00") && regXml.contains("张三"));
+        assertTrue(!regXml.contains("FF0000"), "渲染值不得带红色(原版红色为示例样式,模板已清红)");
 
         RpHxFlow flow = new RpHxFlow();
         flow.setOutcomeForm("技术报告,专利");
@@ -273,6 +274,7 @@ class RenderModelBuilderTest {
         String accXml = docXml(accOut.toPath());
         assertTrue(!accXml.contains("{{"), "验收表渲染后不应残留占位符(m/s 预置空行缺键清空)");
         assertTrue(accXml.contains("40%(14.20万元)") && accXml.contains("赵同学"));
+        assertTrue(!accXml.contains("FF0000"), "验收表渲染值不得带红色(成员表占位符曾克隆红色段落标记,2026-10-08 修复)");
 
         // 变更表:多选勾选组
         RpHxFlow change = new RpHxFlow();
@@ -285,6 +287,7 @@ class RenderModelBuilderTest {
         String chgXml = docXml(chgOut.toPath());
         assertTrue(!chgXml.contains("{{"), "变更表渲染后不应残留占位符");
         assertTrue(chgXml.contains("√项目经费") && chgXml.contains("√执行周期"));
+        assertTrue(!chgXml.contains("FF0000"), "变更表渲染值不得带红色");
 
         // 报告表:区块对循环分段
         RpHxFlow report = new RpHxFlow();
@@ -298,6 +301,7 @@ class RenderModelBuilderTest {
         assertTrue(!repXml.contains("{{"), "报告表渲染后不应残留占位符(含区块对循环)");
         assertTrue(repXml.contains("一、目标达成情况") && repXml.contains("【正文】完成。"));
         assertTrue(repXml.contains("是√") && repXml.contains("√技术报告"));
+        assertTrue(!repXml.contains("FF0000"), "报告表渲染值不得带红色");
     }
 
     private static String docXml(Path docx) throws Exception {

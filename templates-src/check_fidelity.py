@@ -2,12 +2,15 @@
 """
 模板保真自检:逐 run 比对纯净版附件 vs 生成的 hx_*.docx,证明"除占位符外零差异"。
 硬规则,违例即 FAIL:
-  R1 格式不发明:产物每个有字 run 的 rPr 必须来自源文件已有格式(run rPr ∪ 段落标记 rPr)
+  R1 格式不发明:产物每个有字 run 的 rPr 必须来自源文件已有格式(run rPr ∪ 段落标记 rPr,含剥 color 版)
   R2 结构不动:行对齐后(difflib 文本签名)逐格段落数一致;源被删的行必须是纯空行(固定行设计)
   R3 文本只增占位符:对齐格内文本差异必须含 {{占位符}} 或为选项 run 清空
+  R4 无红色残留:产物全文档(run/段落标记/空 run)不得含 color=FF0000——原版红色是示例提示样式,
+    克隆链会带给占位符与渲染值(验收单成员表实测红字),净模板一律清红,值文字默认黑
 允许项:body 末尾拖尾空段收敛为 1(LibreOffice 空白页防护);成员/学生表多余空行删除(m1-m6/s1-s4 设计)。
 用法:python check_fidelity.py [register|change|acceptance|report]
 """
+import copy
 import difflib
 import os
 import sys
@@ -50,19 +53,51 @@ def rpr_key(rPr):
     return repr(norm(rPr))
 
 
+def is_red(color_val):
+    return (color_val or '').upper() == 'FF0000'
+
+
+def red_runs(gen):
+    """R4:产物中 color=FF0000 的清单(run 级带文字上下文;段落标记级计段落文字)——净模板零红"""
+    hits = []
+    for r in gen.iter(W + 'r'):
+        rPr = r.find(W + 'rPr')
+        c = rPr.find(W + 'color') if rPr is not None else None
+        if c is not None and is_red(c.get(W + 'val')):
+            text = ''.join(t.text or '' for t in r.iter(W + 't'))
+            hits.append('run [%s]' % (text[:20] or '<空run>'))
+    for p in gen.iter(W + 'p'):
+        pPr = p.find(W + 'pPr')
+        pm = pPr.find(W + 'rPr') if pPr is not None else None
+        c = pm.find(W + 'color') if pm is not None else None
+        if c is not None and is_red(c.get(W + 'val')):
+            text = ''.join(t.text or '' for t in p.iter(W + 't'))
+            hits.append('段落标记 [%s]' % (text[:20] or '<空段>'))
+    return hits
+
+
 def check(src_path, gen_path):
     src, gen = load(src_path), load(gen_path)
     problems = []
 
-    # R1 格式不发明:源格式集合 = 所有 run rPr ∪ 所有段落标记 rPr(克隆合法来源)
+    # R1 格式不发明:源格式集合 = 所有 run rPr ∪ 所有段落标记 rPr(克隆合法来源);
+    # 剥 color 版同收(占位符写入剥色的合法编辑——原版红色是示例提示样式,值文字一律黑)
+    def add_src_rpr(rPr):
+        key = rpr_key(rPr)
+        src_rprs.add(key)
+        if rPr is not None and rPr.find(W + 'color') is not None:
+            stripped = copy.deepcopy(rPr)
+            stripped.remove(stripped.find(W + 'color'))
+            src_rprs.add(rpr_key(stripped))
+
     src_rprs = set()
     for r in src.iter(W + 'r'):
         if list(r.iter(W + 't')):
-            src_rprs.add(rpr_key(r.find(W + 'rPr')))
+            add_src_rpr(r.find(W + 'rPr'))
     for p in src.iter(W + 'p'):
         pPr = p.find(W + 'pPr')
         if pPr is not None and pPr.find(W + 'rPr') is not None:
-            src_rprs.add(rpr_key(pPr.find(W + 'rPr')))
+            add_src_rpr(pPr.find(W + 'rPr'))
     invented = []
     for r in gen.iter(W + 'r'):
         text = ''.join(t.text or '' for t in r.iter(W + 't'))
@@ -72,6 +107,11 @@ def check(src_path, gen_path):
             invented.append(text[:24])
     if invented:
         problems.append('R1 产物发明了源文件没有的格式 %d 处: %s' % (len(invented), '; '.join(invented[:6])))
+
+    # R4 无红色残留:全文档不得含 color=FF0000(run/段落标记/空 run)
+    reds = red_runs(gen)
+    if reds:
+        problems.append('R4 产物残留红色 %d 处: %s' % (len(reds), '; '.join(reds[:6])))
 
     # R2/R3 行级对齐(每张表独立,双指针):容忍两类合法编辑——
     #   ①源独有纯空行(固定行制作删除的多余空行) ②选项格被 {{占位符}} 顶替(行签名随之变短)

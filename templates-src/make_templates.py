@@ -45,6 +45,8 @@ for pfx, uri in [
 # 保真基线(2026-10-07 定稿):生成模板**不发明任何新格式**——
 # 插入的占位符 run 一律克隆参考 rPr(同格文字 run → 段落标记 rPr,或调用方显式指定),
 # 重写文字只动 <w:t> 不碰 rPr。占位符带什么格式,poi-tl 渲染出的 PDF 就是什么格式。
+# 2026-10-08 补充:克隆链会把原版空格/示例的红色提示样式(FF0000)带给占位符与渲染值
+# (验收单成员表实测整块红字),故 save() 末道工序 strip_red_colors 文档级清红(见其注释)。
 
 
 def para_text(p):
@@ -150,6 +152,20 @@ def load(path):
         return ET.fromstring(z.read('word/document.xml'))
 
 
+def strip_red_colors(root):
+    """末道工序:文档级清红——删除所有 <w:color w:val="FF0000"/>(run 级/段落标记级一律清)。
+    原版表单的红色是示例/提示样式(验收单成员表 41 个空格段落标记即红),不属于交付物样式;
+    克隆链会把色值带给占位符 run,poi-tl 渲染值随之红字(2026-10-08 验收单实测)。
+    值文字一律默认黑;标题深灰(1B1B1B)等非红格式不受影响。"""
+    n = 0
+    for rPr in root.iter(W + 'rPr'):
+        c = rPr.find(W + 'color')
+        if c is not None and (c.get(W + 'val') or '').upper() == 'FF0000':
+            rPr.remove(c)
+            n += 1
+    return n
+
+
 def save(root, out, src, mode='tight'):
     """版式处理分档(三轮迭代定稿,原则:能不动就不动,书写区绝不钳平):
     tight=极限压缩(登记/验收表:2 页硬约束)——边距 900/900/600/600+表格 100% 宽+
@@ -158,6 +174,7 @@ def save(root, out, src, mode='tight'):
           仅上下边距 1440→900,>1000 的大书写行(变更内容 5739/原因 3008/意见栏 ~2000×3)
           按原比例缩放到一页预算(书写区比例不失衡,信息行原样);
     none=原版直出(报告:原版即 1 页,行高 atLeast 随内容自然增长)——版式零改动,仅写占位符。"""
+    strip_red_colors(root)
     if mode == 'tight':
         for mg in root.iter(W + 'pgMar'):
             mg.set(W + 'left', '900')
