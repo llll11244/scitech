@@ -179,6 +179,11 @@ def main():
     assert scan(t2, afid, "验收登记表").get("code") == 0, "A 验收回扫失败"
     r = post("/hx/%d/review" % afid, admin, {})   # 缺 verifiedAmount → 必拦
     check("验收核定金额必填", r.get("code") != 0 and "必填" in (r.get("msg") or ""), str(r.get("msg")))
+    # 终审修复:负数/0 拒(与 addFunding 正数校验对称,核定额入台账+渲进终版归档件须先拦)
+    r = post("/hx/%d/review" % afid, admin, {"verifiedAmount": -1.00})
+    check("验收核定额负数拒", r.get("code") != 0 and "大于 0" in (r.get("msg") or ""), str(r.get("msg")))
+    r = post("/hx/%d/review" % afid, admin, {"verifiedAmount": 0})
+    check("验收核定额 0 拒", r.get("code") != 0 and "大于 0" in (r.get("msg") or ""), str(r.get("msg")))
     r = post("/hx/%d/review" % afid, admin, {"verifiedAmount": 415000.00})
     d = detail(afid, admin)
     p = d["project"]

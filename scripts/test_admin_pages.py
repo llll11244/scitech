@@ -221,8 +221,10 @@ def main():
     else:
         check("建号 ok", r.get("code") == 0 and r.get("data"), str(r.get("msg")))
         uid_new = r.get("data")
-    check("建号重复用户名拒", post("/users", admin, {"username": "t26user", "realName": "x",
-          "role": "teacher", "password": "Abcd1234"}).get("code") != 0, "")
+    r = post("/users", admin, {"username": "t26user", "realName": "x",
+          "role": "teacher", "password": "Abcd1234"})
+    # 终审修复补强:须为友好拒(预检/uk_username DK 兜底同文案),而非全局异常 500
+    check("建号重复用户名友好拒", r.get("code") != 0 and "已存在" in (r.get("msg") or ""), str(r.get("msg")))
     # 新号可登录且 lastLogin 即刻有值
     t3 = login("t26user", "Abcd1234")
     row3 = next((x for x in (get("/users?q=t26user", admin).get("data") or {}).get("records") or []

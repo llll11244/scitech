@@ -123,6 +123,19 @@
             <el-empty v-if="!scans.length" description="暂无扫描件(教师盖章回扫后出现)" :image-size="60" />
           </el-card>
 
+          <!-- 合同扫描件(Task25 hx_apply,登记向导上传;后端已放行 admin 调阅) -->
+          <el-card shadow="never" class="mb">
+            <template #header>合同扫描件</template>
+            <div v-for="a in contracts" :key="a.id" class="scan-item">
+              <el-tag size="small">{{ a.docType }}</el-tag>
+              <span class="scan-name">{{ a.fileName }}</span>
+              <span class="scan-time">{{ fmtTime(a.createTime) }}</span>
+              <el-button link type="primary" size="small" @click="viewAtt(a)">查看</el-button>
+              <el-button link size="small" @click="downAtt(a)">下载</el-button>
+            </div>
+            <el-empty v-if="!contracts.length" description="暂无合同扫描件(教师在登记向导上传)" :image-size="60" />
+          </el-card>
+
           <!-- 时间线 -->
           <el-card shadow="never">
             <template #header>流转时间线</template>
@@ -224,6 +237,8 @@ const flowId = computed(() => Number(route.params.flowId))
 const pdfVisible = computed(() => d.value?.deliverPdfVisible === 'true')
 const records = computed(() => [...(d.value?.records || [])].reverse())
 const scans = computed(() => (d.value?.attachments || []).filter((a) => a.bizType === 'hx_scan'))
+/** 合同扫描件(hx_apply):项目级附件,教师登记向导上传,admin 可调阅(查看/下载同 hx_scan) */
+const contracts = computed(() => (d.value?.attachments || []).filter((a) => a.bizType === 'hx_apply'))
 
 /** 预览文档:验收单两张,其余一张 */
 const deliverDocs = computed(() => {

@@ -146,6 +146,19 @@
             <el-empty v-else description="提交并线下盖章后上传扫描件" :image-size="70" />
           </el-card>
 
+          <!-- 合同扫描件(hx_apply,登记向导上传;本项目级附件,查看/下载同扫描件) -->
+          <el-card shadow="never" class="mb">
+            <template #header>合同扫描件</template>
+            <div v-for="a in contracts" :key="a.id" class="scan-item">
+              <el-tag size="small">{{ a.docType }}</el-tag>
+              <span class="scan-name">{{ a.fileName }}</span>
+              <span class="scan-time">{{ fmtTime(a.createTime) }}</span>
+              <el-button link type="primary" size="small" @click="viewAtt(a)">查看</el-button>
+              <el-button link size="small" @click="downAtt(a)">下载</el-button>
+            </div>
+            <el-empty v-if="!contracts.length" description="暂无合同扫描件" :image-size="60" />
+          </el-card>
+
           <!-- 底部操作 -->
           <el-card shadow="never">
             <template #header>操作</template>
@@ -215,6 +228,8 @@ const activeStep = computed(() => {
 const pdfVisible = computed(() => d.value?.deliverPdfVisible === 'true')
 const records = computed(() => [...(d.value?.records || [])].reverse())
 const scans = computed(() => (d.value?.attachments || []).filter((a) => a.bizType === 'hx_scan'))
+/** 合同扫描件(hx_apply):项目级附件,登记向导上传,教师可查看/下载自己的合同扫描件 */
+const contracts = computed(() => (d.value?.attachments || []).filter((a) => a.bizType === 'hx_apply'))
 const scanDocTypes = computed(() => SCAN_DOC_ALLOW[d.value?.flow?.flowType] || [])
 const printTip = computed(() => ({
   register: '本表一式四份(科技处、计财处、所在单位、项目负责人各一份),双面打印,控制在两页内',

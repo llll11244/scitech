@@ -11,3 +11,5 @@ libreoffice/
 
 # Task29 演示包(git-ignored,scripts/build_demo_package.sh 生成)
 dist-demo/
+# 演示包构建下载缓存(mysql zip 等 248MB,勿提交)
+scripts/cache/

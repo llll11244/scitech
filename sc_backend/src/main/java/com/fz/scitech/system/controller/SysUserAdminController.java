@@ -12,6 +12,7 @@ import com.fz.scitech.system.mapper.SysUserMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -114,7 +115,12 @@ public class SysUserAdminController {
         u.setPhone(body.phone);
         u.setStatus(1);
         u.setCreateBy(attr(request));
-        userMapper.insert(u);
+        try {
+            userMapper.insert(u);
+        } catch (DuplicateKeyException e) {
+            // uk_username 兜底:并发双击下 selectCount 判重窗口外的插入冲突给友好提示(同 SysDictController 口径)
+            throw new BizException("用户名已存在,请更换用户名");
+        }
         return Result.ok(u.getId());
     }
 

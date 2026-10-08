@@ -25,6 +25,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -203,6 +204,12 @@ public class HxAuditService {
     private void approveAcceptance(Long adminId, String adminName, RpHxFlow flow, BigDecimal verifiedAmount) {
         if (verifiedAmount == null) {
             throw new BizException("核定到账金额(verifiedAmount)必填");
+        }
+        // 量级收口到分(DECIMAL(14,2) 同标度,四舍五入)后再校验:负数/0 拒,
+        // 与 FundingService.addFunding 到账金额同口径(核定额入台账并渲进终版归档件,须先拦)
+        verifiedAmount = verifiedAmount.setScale(2, RoundingMode.HALF_UP);
+        if (verifiedAmount.signum() <= 0) {
+            throw new BizException("核定到账金额必须大于 0");
         }
         Long pid = flow.getProjectId();
         RpProject p = requireProject(pid);
