@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -97,22 +98,33 @@ public class BackupService {
         this.keep = keep;
     }
 
-    /** 启动自检:mysqldump --version 探测;失败仅置灰功能,不阻断应用启动(spec §八) */
+    /**
+     * 启动自检:mysqldump --version 探测;失败仅置灰功能,不阻断应用启动(spec §八)。
+     * 输出由后台守护线程排空(同 runMysqldump 惯用法):若 mysqldump-path 误指到
+     * 等待 stdin 的可执行文件,主线程同步 readAllBytes 会永久阻塞 @PostConstruct,
+     * 整个应用起不来——故 waitFor 超时必须真正可达;并主动关闭子进程 stdin,
+     * 让这类进程尽快收到 EOF 自行退出而非干等超时。
+     */
     @PostConstruct
     void selfCheck() {
         try {
             Process p = new ProcessBuilder(mysqldumpPath, "--version").start();
-            String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-            String err = new String(p.getErrorStream().readAllBytes(), StandardCharsets.UTF_8);
+            StringBuilder out = new StringBuilder();
+            StringBuilder err = new StringBuilder();
+            Thread outDrain = drainAsync(p.getInputStream(), out);
+            Thread errDrain = drainAsync(p.getErrorStream(), err);
+            p.getOutputStream().close();
             if (!p.waitFor(30, TimeUnit.SECONDS)) {
                 p.destroyForcibly();
                 throw new IllegalStateException("探测超时");
             }
+            outDrain.join(5000);
+            errDrain.join(5000);
             if (p.exitValue() != 0) {
-                throw new IllegalStateException("退出码 " + p.exitValue() + ":" + firstLine(out + err));
+                throw new IllegalStateException("退出码 " + p.exitValue() + ":" + firstLine(out.toString() + err.toString()));
             }
             available = true;
-            selfCheckMsg = firstLine(out + err);
+            selfCheckMsg = firstLine(out.toString() + err.toString());
             log.info("备份子系统自检通过:mysqldump={},{}", mysqldumpPath, selfCheckMsg);
         } catch (Exception e) {
             available = false;
@@ -120,6 +132,20 @@ public class BackupService {
                     + ",请配置 sc.mysqldump-path 指向正确路径,或将 mysqldump.exe 放入程序根目录";
             log.warn("备份子系统自检失败,功能置灰:{}", e.getMessage());
         }
+    }
+
+    /** 后台守护线程排空进程输出:主线程不同步读流(EOF 不到会永久阻塞),超时逻辑才可达 */
+    private Thread drainAsync(InputStream in, StringBuilder sb) {
+        Thread t = new Thread(() -> {
+            try {
+                sb.append(new String(in.readAllBytes(), StandardCharsets.UTF_8));
+            } catch (IOException ignore) {
+                // 进程被超时强杀时流随之关闭,忽略
+            }
+        }, "backup-proc-drain");
+        t.setDaemon(true);
+        t.start();
+        return t;
     }
 
     /** 状态(前端按钮禁用与提示依据);含 running 供手动触发后轮询 */
@@ -235,7 +261,7 @@ public class BackupService {
     /**
      * 执行 mysqldump(注意:--defaults-extra-file 必须是第一个选项才会被读取;
      * --result-file 直落文件,绕开进程管道的编码坑)。
-     * stderr 用后台线程排空(不排空会撑爆管道缓冲区卡死进程),主线程不能同步 readAllBytes——
+     * stderr 用 drainAsync 后台排空(不排空会撑爆管道缓冲区卡死进程),主线程不同步读流——
      * 否则进程挂起(如数据库网络停滞)时 EOF 永不到来,waitFor 超时永远执行不到,
      * running 标记永久为 true,备份功能锁死至重启。
      * 失败时异常只带退出码与 mysqldump 自身输出(不含口令)。
@@ -253,15 +279,7 @@ public class BackupService {
                 db);
         Process p = new ProcessBuilder(cmd).start();
         StringBuilder err = new StringBuilder();
-        Thread errDrain = new Thread(() -> {
-            try {
-                err.append(new String(p.getErrorStream().readAllBytes(), StandardCharsets.UTF_8));
-            } catch (IOException ignore) {
-                // 进程被超时强杀时流随之关闭,忽略
-            }
-        }, "backup-dump-stderr");
-        errDrain.setDaemon(true);
-        errDrain.start();
+        Thread errDrain = drainAsync(p.getErrorStream(), err);
         if (!p.waitFor(DUMP_TIMEOUT_MINUTES, TimeUnit.MINUTES)) {
             p.destroyForcibly();
             throw new BizException("mysqldump 执行超时(>" + DUMP_TIMEOUT_MINUTES + " 分钟),已终止");
