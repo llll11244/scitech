@@ -44,9 +44,10 @@ section() { echo; echo "==================== $* ===================="; }
 
 # ---------------- 预检 ----------------
 section "预检"
-[ -d "$DIST" ] || die "dist-demo 不存在,--files-only 仅用于微调已有包"
 port_listening() { netstat -ano | grep -E "[:.]$1[[:space:]]" | grep -q LISTENING; }
 if [ "$FILES_ONLY" -eq 1 ]; then
+  # 仅微调已有包:要求 dist-demo 已存在;全量模式则无条件 rm -rf 重建,不要求先有目录
+  [ -d "$DIST" ] || die "dist-demo 不存在,--files-only 仅用于微调已有包(全量组装请去掉该参数)"
   echo "--files-only:仅重写 my.ini/start.bat/stop.bat/README"
 else
   [ -f "$MYSQL_ZIP" ] || die "MySQL zip 不存在:$MYSQL_ZIP"
