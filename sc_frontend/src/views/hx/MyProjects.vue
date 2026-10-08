@@ -20,7 +20,7 @@
         <el-table-column prop="approvalNo" label="编号" width="130">
           <template #default="{ row }">{{ row.approvalNo || '—' }}</template>
         </el-table-column>
-        <el-table-column label="状态" width="100">
+        <el-table-column label="状态" width="130">
           <template #default="{ row }">
             <el-tag :type="stateOf(row).type">{{ stateOf(row).label }}</el-tag>
           </template>
@@ -78,9 +78,12 @@ const inflightChange = (row) =>
 /** 验收单每项目至多一张(任何状态) */
 const acceptanceFlow = (row) => row.flows?.find((f) => f.flowType === 'acceptance')
 
-/** 行状态 tag:已结题 > 登记中(audit<2) > 变更中 > 验收中 > 在研 */
+/** 行状态 tag:已结题 > 被退回(任一在途单 status=4,醒目提示修改重交) > 登记中(audit<2) > 变更中 > 验收中 > 在研 */
+const FLOW_NAMES = { register: '登记', change: '变更', acceptance: '验收' }
 function stateOf(row) {
   if (row.status === '结题') return { label: '已结题', type: 'info' }
+  const rejected = row.flows?.find((f) => f.status === 4)
+  if (rejected) return { label: `${FLOW_NAMES[rejected.flowType] || '流程'}单被退回`, type: 'danger' }
   if (row.auditStatus < 2) {
     return { label: row.auditStatus === 0 ? '登记草稿' : '登记中', type: 'warning' }
   }
