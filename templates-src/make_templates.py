@@ -425,24 +425,6 @@ def strip_trailing_empty_paras(root):
             break
 
 
-def insert_placeholder_after(root, marker, ph):
-    """定位含 marker 的单元格,向 marker 段之后第一个空段插占位符(报告正文格:说明句后留白区开头)"""
-    for tc in root.iter(W + 'tc'):
-        ps = tc.findall(W + 'p')
-        texts = [para_text(p) for p in ps]
-        if not any(marker in t for t in texts):
-            continue
-        for i, t in enumerate(texts):
-            if marker in t:
-                ref = run_rPr(r0) if (r0 := first_text_run(ps[i])) is not None else para_mark_rPr(ps[i])
-                for q in ps[i + 1:]:
-                    if not para_text(q).strip():
-                        add_run_text(q, ph, ref)
-                        return
-                raise RuntimeError('marker 后无空段可插: ' + marker)
-    raise RuntimeError('未找到含 marker 的段落: ' + marker)
-
-
 def make_fixed_rows(root, header_keys, fields, row_count, prefix, stop_keys=()):
     """表头行后 row_count 行改为固定占位符行:第 i 行各列填 {{prefix i+字段}},
     提示文字(XX万元/请自行增减行等)清空。不做行删除/复制——规避 poi-tl 行循环
@@ -613,9 +595,32 @@ def make_report(root):
                 break
         else:
             raise RuntimeError('未找到待替换段落: ' + label)
-    # 正文:说明句后的第一个空段插入段落级区块对循环(poi-tl 区块对支持段落重复;
-    # 格式克隆自说明句 run)。20 个尾随空段全数保留(保真:箱体高度由空段撑出)
-    insert_placeholder_after(root, '页数不限', '{{?reportParagraphs}}{{this}}{{/reportParagraphs}}')
+    # 正文:说明句后书写区(空段序列,至「项目负责人(签字)」前)。
+    # ①原版空段段落格式带 firstLineChars=2800(28 字巨缩进——空段无字不显,正文段第一行
+    #   几乎顶到行尾,2026-10-08 实测"正文开始前超长空格"),统一改为正文标准首行缩进 2 字;
+    # ②区块对拆三段独占({{?}}段 / {{this}}段 / {{/}}段)——poi-tl 跨段区块对按段落循环:
+    #   每段正文独立成段落,内容不足时剩余空段保留原版书写区高度,超出自然增段(提示行明示页数不限)
+    for tc in root.iter(W + 'tc'):
+        ps = tc.findall(W + 'p')
+        texts = [para_text(p) for p in ps]
+        if not any('页数不限' in t for t in texts):
+            continue
+        tip = next(i for i, t in enumerate(texts) if '页数不限' in t)
+        sign = next(i for i, t in enumerate(texts) if '项目负责人（签字）' in t)
+        area = ps[tip + 1:sign]
+        for p in area:
+            pPr = p.find(W + 'pPr')
+            ind = pPr.find(W + 'ind') if pPr is not None else None
+            if ind is not None and ind.get(W + 'firstLineChars'):
+                ind.set(W + 'firstLineChars', '200')
+                ind.set(W + 'firstLine', '420')
+        ref = run_rPr(r0) if (r0 := first_text_run(ps[tip])) is not None else para_mark_rPr(ps[tip])
+        add_run_text(area[0], '{{?reportParagraphs}}', ref)
+        add_run_text(area[1], '{{this}}', ref)
+        add_run_text(area[2], '{{/reportParagraphs}}', ref)
+        break
+    else:
+        raise RuntimeError('未找到报告正文书写区(说明句/签字落款)')
 
 
 SRC_DIR = os.path.dirname(os.path.abspath(__file__))

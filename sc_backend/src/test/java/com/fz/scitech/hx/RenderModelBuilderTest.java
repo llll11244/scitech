@@ -304,9 +304,87 @@ class RenderModelBuilderTest {
         assertTrue(!repXml.contains("FF0000"), "报告表渲染值不得带红色");
     }
 
+    @Test
+    void reportBodyFillsWritingAreaPerParagraph() throws Exception {
+        // 2026-10-08 修复:报告正文须落书写区——区块对跨段(poi-tl 按段循环)每段独立成段,
+        // 不足 20 段剩余空行保留原版书写区高度,超出自然增段;正文段不得残留原版 28 字巨缩进
+        TemplateService tplSvc = new TemplateService(null, null, "target/test-upload");
+
+        RpHxFlow two = new RpHxFlow();
+        two.setIsOnTime(1);
+        two.setReportContent("一、目标达成情况\n\n二、研究过程总结");
+        File out = new File("target/test-report-fill.docx");
+        tplSvc.renderDocx("hx_report", new File("../templates-src/hx_report.docx"), out,
+                builder.buildReport(project(), hxProject(), two));
+        List<String> paras = paraTexts(out.toPath());
+        int i1 = paras.indexOf("一、目标达成情况");
+        int i2 = paras.indexOf("二、研究过程总结");
+        assertTrue(i1 >= 0 && i2 == i1 + 1, "正文各段应各自成段且相邻相连,实际 i1=" + i1 + " i2=" + i2);
+        assertTrue(!docXml(out.toPath()).contains("2800"), "正文段不得残留原版 firstLineChars=2800 巨缩进");
+        int signIdx = -1;
+        for (int i = 0; i < paras.size(); i++) {
+            if (paras.get(i).contains("项目负责人（签字）")) {
+                signIdx = i;
+                break;
+            }
+        }
+        assertTrue(signIdx > i2, "落款应在正文之后");
+        long empties = paras.subList(i2 + 1, signIdx).stream().filter(String::isEmpty).count();
+        assertTrue(empties >= 10, "内容不足时书写区空行应保留(实测剩余空段 " + empties + ")");
+
+        // 超员:25 段各自成段,落款仍在最后(提示行明示页数不限)
+        StringBuilder sb = new StringBuilder();
+        for (int i = 1; i <= 25; i++) {
+            sb.append("第").append(i).append("段正文内容,用于验证超员扩段。\n\n");
+        }
+        RpHxFlow many = new RpHxFlow();
+        many.setIsOnTime(1);
+        many.setReportContent(sb.toString());
+        File out2 = new File("target/test-report-overflow.docx");
+        tplSvc.renderDocx("hx_report", new File("../templates-src/hx_report.docx"), out2,
+                builder.buildReport(project(), hxProject(), many));
+        List<String> paras2 = paraTexts(out2.toPath());
+        long bodyCount = paras2.stream().filter(s -> s.startsWith("第") && s.endsWith("。")).count();
+        assertEquals(25, bodyCount, "超员 25 段应各自成段落入书写区");
+        int signIdx2 = -1;
+        for (int i = paras2.size() - 1; i >= 0; i--) {
+            if (paras2.get(i).contains("年") && paras2.get(i).contains("月")) {
+                signIdx2 = i;
+                break;
+            }
+        }
+        assertTrue(signIdx2 > 0, "应存在落款(年 月 日)段");
+        assertTrue(paras2.subList(signIdx2 + 1, paras2.size()).stream().allMatch(String::isEmpty),
+                "落款之后只允许原版文档收尾空段");
+    }
+
     private static String docXml(Path docx) throws Exception {
         try (ZipFile z = new ZipFile(docx.toFile())) {
             return new String(z.getInputStream(z.getEntry("word/document.xml")).readAllBytes(), StandardCharsets.UTF_8);
         }
+    }
+
+    /** 全文档段落文字列表(按文档序,含表格内)——正文分段/空段保留断言用 */
+    private static List<String> paraTexts(Path docx) throws Exception {
+        byte[] xml;
+        try (ZipFile z = new ZipFile(docx.toFile())) {
+            xml = z.getInputStream(z.getEntry("word/document.xml")).readAllBytes();
+        }
+        var dbf = javax.xml.parsers.DocumentBuilderFactory.newInstance();
+        dbf.setNamespaceAware(true); // 默认 false 时 getElementsByTagNameNS 匹配不到 w: 前缀元素
+        var doc = dbf.newDocumentBuilder().parse(new java.io.ByteArrayInputStream(xml));
+        org.w3c.dom.NodeList ps = doc.getElementsByTagNameNS(
+                "http://schemas.openxmlformats.org/wordprocessingml/2006/main", "p");
+        List<String> out = new ArrayList<>();
+        for (int i = 0; i < ps.getLength(); i++) {
+            StringBuilder sb = new StringBuilder();
+            org.w3c.dom.NodeList ts = ((org.w3c.dom.Element) ps.item(i)).getElementsByTagNameNS(
+                    "http://schemas.openxmlformats.org/wordprocessingml/2006/main", "t");
+            for (int j = 0; j < ts.getLength(); j++) {
+                sb.append(ts.item(j).getTextContent());
+            }
+            out.add(sb.toString());
+        }
+        return out;
     }
 }
