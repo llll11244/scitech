@@ -22,6 +22,9 @@ sc:
   upload-dir: ./upload
   backup-dir: ./backup
   office-home: ./libreoffice
+  # 前端静态资源目录(Task29 演示包):空=关闭(dev 走 5173 代理);指向 npm run build
+  # 的 dist 目录时由内嵌 Tomcat 的 ROOT 上下文直出前端(SPA 回退),/api 不受影响
+  static-dir: ${SC_STATIC_DIR:}
   # 备份子系统(Task27):mysqldump 部署包口径=包根 ./mysqldump.exe(dev 在 application-dev.yml 指向本机安装)
   mysqldump-path: ./mysqldump.exe
   backup-cron: "0 30 2 * * MON"

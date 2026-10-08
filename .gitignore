@@ -8,3 +8,6 @@ libreoffice/
 .idea/
 .vscode/
 .superpowers/
+
+# Task29 演示包(git-ignored,scripts/build_demo_package.sh 生成)
+dist-demo/
