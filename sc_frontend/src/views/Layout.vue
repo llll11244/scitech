@@ -22,7 +22,7 @@
             <span>横向项目</span>
           </el-menu-item>
         </template>
-        <!-- 科技处端(N4 Task26:审批/项目/字典/模板/用户;备份=Task27 交付占位禁用) -->
+        <!-- 科技处端(N4 Task26:审批/项目/字典/模板/用户;备份=Task27) -->
         <template v-else>
           <el-menu-item v-if="userStore.isAdmin" index="/notify">
             <el-icon><Bell /></el-icon>
@@ -49,9 +49,9 @@
             <el-icon><User /></el-icon>
             <span>用户管理</span>
           </el-menu-item>
-          <el-menu-item v-if="userStore.isAdmin" index="/admin/backup" disabled>
+          <el-menu-item v-if="userStore.isAdmin" index="/admin/backup">
             <el-icon><Box /></el-icon>
-            <span>数据备份(Task27 交付)</span>
+            <span>数据备份</span>
           </el-menu-item>
         </template>
       </el-menu>

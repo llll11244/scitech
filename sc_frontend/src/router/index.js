@@ -66,7 +66,7 @@ const routes = [
         component: () => import('../views/hx/FundingView.vue'),
         meta: { title: '到账明细', roles: ['teacher', 'admin'] }
       },
-      /* ==== N4 科技处端(admin 六页,Task26;备份页 Task27 交付暂不设路由) ==== */
+      /* ==== N4 科技处端(admin 六页 Task26+备份页 Task27) ==== */
       {
         path: 'admin/audit',
         name: 'AuditList',
@@ -96,6 +96,12 @@ const routes = [
         name: 'UserManage',
         component: () => import('../views/admin/UserManage.vue'),
         meta: { title: '用户管理', roles: ['admin'] }
+      },
+      {
+        path: 'admin/backup',
+        name: 'BackupManage',
+        component: () => import('../views/admin/BackupManage.vue'),
+        meta: { title: '数据备份', roles: ['admin'] }
       }
     ]
   }

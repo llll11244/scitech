@@ -10,3 +10,5 @@ spring:
       mode: always
 sc:
   cors-origin: http://localhost:5173
+  # dev 机 mysqldump 实际位置(仓库根不携带 exe;MySQL80 服务=D:\dev\mysql-8.0)
+  mysqldump-path: D:/dev/mysql-8.0/bin/mysqldump.exe
