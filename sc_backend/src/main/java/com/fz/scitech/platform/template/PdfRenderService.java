@@ -30,7 +30,8 @@ import java.time.format.DateTimeFormatter;
 @Service
 public class PdfRenderService {
 
-    private static final DateTimeFormatter TS = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
+    /** 落盘文件名时间戳:毫秒级(Task25 Minor⑤ 收口,Task28)——秒级同秒重渲 REPLACE_EXISTING 会物理覆盖旧件 */
+    private static final DateTimeFormatter TS = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss_SSS");
 
     private final TemplateService templateService;
     private final PdfConverter pdfConverter;

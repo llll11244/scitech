@@ -134,6 +134,16 @@ def main():
     check("验收草稿编辑空值显式置空", d["flow"].get("isOnTime") is None,
           "isOnTime=%r" % d["flow"].get("isOnTime"))
 
+    # 6c/Task28(N3 终审挂账):members=null(字段未传)=不动成员表;显式空列表=清空(与登记同口径)
+    r = post("/hx/acceptance/draft", t, dict(acc, flowId=afid, members=None))
+    d = requests.get(BASE + "/hx/%d" % afid, headers=t, timeout=30).json()["data"]
+    check("验收编辑不传成员=成员表不动", r.get("code") == 0 and len(d["members"]) == 2,
+          "members=%d" % len(d["members"]))
+    r = post("/hx/acceptance/draft", t, dict(acc, flowId=afid, members=[]))
+    d = requests.get(BASE + "/hx/%d" % afid, headers=t, timeout=30).json()["data"]
+    check("验收编辑显式空成员=清空", r.get("code") == 0 and len(d["members"]) == 0,
+          "members=%d" % len(d["members"]))
+
     # 7. acceptance/submit → 期望拒绝(未确认)
     r = post("/hx/acceptance/submit", t, {"flowId": afid})
     check("验收提交未确认被拒", r.get("code") != 0 and "未确认" in (r.get("msg") or ""), str(r.get("msg")))

@@ -2,12 +2,16 @@
 """
 科技处审批接口冒烟(N4 Task24):审批列表/三流程通过副作用(登记编号入账/变更改写/验收结题+终版两张)/
 退回(预检+常规)/教师重交(旧待签+旧扫描件作废)/越权与幂等。
+Task28 补强:before_json camelCase 键齐全(diff 展示数据完整性)/同一登记并发通过两连发恰一成功/
+  /hx/leaders 收紧(viewer 拒+LIKE 通配转义,viewer 号脚本内经 admin 建号,收尾停用)。
 本脚本首次贯通 N3 卡住的全链路:登记确认(audit_status=2)→变更/验收提交→通过生效(spec §6.1)。
 前置:应用已启动(dev),四类模板启用版在库,LibreOffice 就位;admin/admin123、teacher/teacher123、
-teacher2/teacher2123(dev 种子);viewer 无 dev 账号,非 admin 拒绝以 teacher 角色覆盖(同一 requireAdmin 路径)。
+teacher2/teacher2123(dev 种子)。
 """
+import json
 import re
 import sys
+import threading
 from datetime import date
 from decimal import Decimal
 
@@ -49,6 +53,11 @@ def get(path, headers, timeout=30):
 
 def detail(fid, headers):
     return get("/hx/%d" % fid, headers)["data"]
+
+
+def q_leaders(headers, q):
+    """leaders 搜索(params 编码,% 等特殊字符原样送达服务端)"""
+    return requests.get(BASE + "/hx/leaders", headers=headers, params={"q": q}, timeout=30).json()
 
 
 def notify_has(headers, project_id, kw):
@@ -136,6 +145,15 @@ def main():
     check("变更 before_json 快照", "355000" in (d["flow"].get("beforeJson") or "")
           and "2027-12-31" in (d["flow"].get("beforeJson") or ""),
           str(d["flow"].get("beforeJson"))[:120])
+    # 3b. Task28 补强:diff 展示数据完整性——before_json 五字段 camelCase 键齐全+值正确
+    #     (N4 审批 diff 按键消费,缺键即空白对照;MySQL JSON 列读回已规范化)
+    bj = json.loads(d["flow"]["beforeJson"])
+    check("before_json camelCase 键齐全",
+          set(bj) == {"name", "leaderName", "deptId", "contractAmount", "endDate"}
+          and bj["name"] == reg_a["name"] and bj["leaderName"] == "教师甲"
+          and bj["deptId"] == 9 and dec(bj["contractAmount"]) == Decimal("355000.00")
+          and str(bj["endDate"]) == "2027-12-31",
+          str(bj)[:140])
     assert scan(t, cfid, "变更表").get("code") == 0, "A 变更回扫失败"
     r = post("/hx/%d/review" % cfid, admin, {})
     d = detail(cfid, admin)
@@ -228,10 +246,68 @@ def main():
     check("通过且编号唯一合法", r.get("code") == 0 and d["flow"]["status"] == 3
           and no_re.match(no_b or "") and no_a != no_b, "A=%s B=%s" % (no_a, no_b))
 
+    # ---------------- 项目C(teacher):并发通过两连发(Task28 补强,决策#34-② 条件更新守卫) ----------------
+    reg_c = dict(reg_a, name="审批测试-并发通过演练项目")
+    fid_c = post("/hx/register/draft", t, reg_c)["data"]
+    assert post("/hx/register/submit", t, {"flowId": fid_c}).get("code") == 0, "C 登记提交失败"
+    assert scan(t, fid_c, "登记表").get("code") == 0, "C 回扫失败"
+
+    # 9b. 两线程同时 approve 同一登记:恰好一个成功(编号只分配一次),另一个可观测失败
+    barrier = threading.Barrier(2)
+    outcomes = []
+
+    def hit():
+        barrier.wait(timeout=10)
+        outcomes.append(post("/hx/%d/review" % fid_c, admin, {}))
+
+    threads = [threading.Thread(target=hit) for _ in range(2)]
+    for th in threads:
+        th.start()
+    for th in threads:
+        th.join(timeout=60)
+    d = detail(fid_c, admin)
+    ok_cnt = sum(1 for x in outcomes if x.get("code") == 0)
+    fail_msgs = [str(x.get("msg")) for x in outcomes if x.get("code") != 0]
+    check("并发通过两连发恰一成功",
+          len(outcomes) == 2 and ok_cnt == 1 and len(fail_msgs) == 1
+          and any(kw in fail_msgs[0] for kw in ("状态已变化", "已回扫"))
+          and d["flow"]["status"] == 3 and no_re.match(d["project"].get("approvalNo") or ""),
+          "codes=%s msgs=%s no=%s" % ([x.get("code") for x in outcomes], fail_msgs,
+                                      d["project"].get("approvalNo")))
+
     # 10. 越权:教师不可调 admin 审批接口
     check("教师不可通过/退回/列表", post("/hx/%d/review" % fid_b, t, {}).get("code") != 0
           and post("/hx/%d/reject" % fid_b, t, {"opinion": "x"}).get("code") != 0
           and get("/hx/audit", t).get("code") != 0, "")
+
+    # 11. Task28 收紧:/hx/leaders viewer 拒 + LIKE 通配转义(teacher/admin 可用=变更表单依赖)
+    r = post("/users", admin, {"username": "t28viewer", "realName": "只读访客二十八",
+                               "role": "viewer", "password": "Viewer123"})
+    if r.get("code") != 0:
+        # 可重跑:历史 t28viewer(改密/停用)→ 重置口令+启用后继续
+        stale = next((x for x in (get("/users?q=t28viewer", admin).get("data") or {}).get("records") or []
+                      if x.get("username") == "t28viewer"), None)
+        assert stale, "viewer 建号失败且无历史账号:" + str(r.get("msg"))
+        vid = stale["id"]
+        requests.put(BASE + "/users/%s/password" % vid, headers=admin,
+                     json={"password": "Viewer123"}, timeout=10)
+        requests.put(BASE + "/users/%s/status" % vid, headers=admin,
+                     json={"status": 1}, timeout=10)
+    else:
+        vid = r.get("data")
+    v = login("t28viewer", "Viewer123")
+    check("leaders viewer 拒", q_leaders(v, "t").get("code") != 0, "")
+    check("leaders LIKE 转义(%/_ 不当通配)",
+          q_leaders(t, "%").get("data") == [] and q_leaders(t, "_").get("data") == []
+          and q_leaders(t, "te_cher").get("data") == [],
+          "%%=%d _=%d te_cher=%d" % (len(q_leaders(t, "%").get("data") or []),
+                                     len(q_leaders(t, "_").get("data") or []),
+                                     len(q_leaders(t, "te_cher").get("data") or [])))
+    check("leaders 正常搜索不受影响",
+          any(u.get("username") == "teacher2" for u in (q_leaders(t, "teacher2").get("data") or [])),
+          "")
+    # 收尾:停用 viewer 测试号(留存停用态,与 t26user 同口径)
+    requests.put(BASE + "/users/%s/status" % vid, headers=admin, json={"status": 0}, timeout=10)
 
     failed = [n for n, ok in results if not ok]
     print("\n%d/%d 通过" % (len(results) - len(failed), len(results)))

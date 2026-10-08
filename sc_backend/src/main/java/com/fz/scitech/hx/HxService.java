@@ -75,8 +75,11 @@ import java.util.stream.Collectors;
 @Service
 public class HxService {
 
-    private static final DateTimeFormatter TS = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
+    /** 扫描件文件名时间戳:毫秒级(Task25 Minor⑤ 收口,Task28)——同秒重传同 docType 会物理覆盖旧件 */
+    private static final DateTimeFormatter TS = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss_SSS");
     private static final String DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    /** 扫描件允许扩展名(N4 注意⑦,Task28):与 FundingService.ATTACH_EXTS 同口径 */
+    private static final List<String> SCAN_EXTS = List.of("pdf", "png", "jpg", "jpeg");
 
     private final RpProjectMapper projectMapper;
     private final RpHxProjectMapper hxMapper;
@@ -505,12 +508,17 @@ public class HxService {
     @Transactional
     public Long uploadScan(Long uid, String username, Long flowId, MultipartFile file, String docType) {
         RpHxFlow flow = ownedFlow(uid, flowId);
+        // 输入校验先行(空文件/扩展名白名单),再进状态机——格式非法在任何状态下同一句拒绝(Task28)
+        if (file == null || file.isEmpty()) {
+            throw new BizException("请选择扫描件文件");
+        }
+        String ext = ext(file.getOriginalFilename());
+        if (!SCAN_EXTS.contains(ext)) {
+            throw new BizException("扫描件格式仅支持:" + String.join("/", SCAN_EXTS));
+        }
         int st = flow.getStatus();
         if (st != HxFlowStatus.SUBMITTED && st != HxFlowStatus.SCANNED) {
             throw new BizException("仅已提交状态可上传扫描件");
-        }
-        if (file == null || file.isEmpty()) {
-            throw new BizException("请选择扫描件文件");
         }
         validateScanDocType(flow.getFlowType(), docType);
         if (st == HxFlowStatus.SUBMITTED) {
@@ -525,7 +533,7 @@ public class HxService {
         if (!dir.exists() && !dir.mkdirs()) {
             throw new BizException("扫描件目录创建失败:" + dir);
         }
-        File dest = new File(dir, "scan_" + LocalDateTime.now().format(TS) + "." + ext(file.getOriginalFilename()));
+        File dest = new File(dir, "scan_" + LocalDateTime.now().format(TS) + "." + ext);
         try (InputStream in = file.getInputStream()) {
             java.nio.file.Files.copy(in, dest.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException e) {
@@ -1008,12 +1016,16 @@ public class HxService {
         return dto;
     }
 
-    /** 成员全量替换:逻辑删旧行+插新行(姓名空行不落库;sortNo 缺省按保存顺序) */
+    /**
+     * 成员全量替换:逻辑删旧行+插新行(姓名空行不落库;sortNo 缺省按保存顺序)。
+     * members=null(字段未传)=不动成员表(N3 终审挂账,Task28):null 是「本段没交」,
+     * 显式空列表才是「清空」——登记/验收编辑路径传 null 不得清掉既有成员行。
+     */
     private void replaceMembers(Long projectId, List<MemberDTO> members, String createBy) {
-        memberMapper.delete(new LambdaQueryWrapper<RpMember>().eq(RpMember::getProjectId, projectId));
         if (members == null) {
             return;
         }
+        memberMapper.delete(new LambdaQueryWrapper<RpMember>().eq(RpMember::getProjectId, projectId));
         int sort = 1;
         for (MemberDTO m : members) {
             if (m == null || isBlank(m.getName())) {
@@ -1121,18 +1133,15 @@ public class HxService {
         return p.startsWith(root + "/") ? p.substring(root.length() + 1) : p;
     }
 
-    /** 扫描件扩展名(取原名后缀,非法/缺失回退 pdf) */
+    /** 附件扩展名(取原名后缀小写,缺失/非法回退空串走白名单拒绝;Task28 起不再兜底 pdf) */
     private static String ext(String filename) {
         if (filename != null) {
             int dot = filename.lastIndexOf('.');
             if (dot >= 0) {
-                String e = filename.substring(dot + 1).toLowerCase();
-                if (e.matches("[a-z0-9]{1,8}")) {
-                    return e;
-                }
+                return filename.substring(dot + 1).toLowerCase();
             }
         }
-        return "pdf";
+        return "";
     }
 
     private static boolean isBlank(String s) {

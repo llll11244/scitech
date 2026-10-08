@@ -48,8 +48,9 @@ import java.util.stream.Collectors;
 @Service
 public class FundingService {
 
-    private static final DateTimeFormatter TS = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
-    /** 合同附件允许扩展名(新代码生而带白名单;Task28 将同口径收紧 uploadScan) */
+    /** 附件文件名时间戳:毫秒级(Task25 Minor⑤ 收口,Task28)——同秒重传同 docType 会物理覆盖旧件 */
+    private static final DateTimeFormatter TS = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss_SSS");
+    /** 合同附件允许扩展名(uploadScan 已于 Task28 同口径收紧:见 HxService.SCAN_EXTS) */
     private static final List<String> ATTACH_EXTS = List.of("pdf", "png", "jpg", "jpeg");
     /** 通用附件端点当前支持的文档类型(N4 计划 ruling:合同扫描件;后续扩展在此加) */
     private static final List<String> ATTACH_DOC_TYPES = List.of("合同");

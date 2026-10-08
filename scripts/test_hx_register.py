@@ -114,6 +114,27 @@ def main():
           d["hx"].get("mgmtFeeAmount") is None and d["hx"].get("leaderEmail") is None,
           "mgmtFeeAmount=%r leaderEmail=%r" % (d["hx"].get("mgmtFeeAmount"), d["hx"].get("leaderEmail")))
 
+    # 10b/Task28(N3 终审挂账):members=null(字段未传)=不动成员表;显式空列表=清空
+    r = requests.post(BASE + "/hx/register/draft", headers=t,
+                      json=dict(dto, flowId=fid2, members=None)).json()
+    d = requests.get(BASE + "/hx/%d" % fid2, headers=t).json()["data"]
+    check("编辑不传成员=成员表不动", r.get("code") == 0 and len(d["members"]) == 1,
+          "members=%d" % len(d["members"]))
+    r = requests.post(BASE + "/hx/register/draft", headers=t,
+                      json=dict(dto, flowId=fid2, members=[])).json()
+    d = requests.get(BASE + "/hx/%d" % fid2, headers=t).json()["data"]
+    check("编辑显式空成员=清空", r.get("code") == 0 and len(d["members"]) == 0,
+          "members=%d" % len(d["members"]))
+
+    # 10c/Task28:uploadScan 扩展名白名单(pdf/png/jpg/jpeg 外拒)
+    r = requests.post(BASE + "/hx/%d/scan" % fid2, headers=t, data={"docType": "登记表"},
+                      files={"file": ("evil.exe", b"MZ fake")}).json()
+    check("扫描件扩展名白名单拒", r.get("code") != 0 and "格式" in (r.get("msg") or ""),
+          str(r.get("msg"))[:60])
+    r = requests.post(BASE + "/hx/%d/scan" % fid2, headers=t, data={"docType": "登记表"},
+                      files={"file": ("无扩展名", b"%PDF-1.4 fake")}).json()
+    check("扫描件无扩展名拒", r.get("code") != 0, str(r.get("msg"))[:60])
+
     r = requests.delete(BASE + "/hx/%d" % fid2, headers=t)
     check("删草稿", r.json().get("code") == 0, str(r.json()))
 

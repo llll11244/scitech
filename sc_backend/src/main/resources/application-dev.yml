@@ -4,7 +4,8 @@ spring:
     url: jdbc:mysql://localhost:3306/scitech_db?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
     username: root
     password: Research@2026
-  # 建表与字典初值:schema.sql 带 IF NOT EXISTS、data.sql 先删后插,均幂等,可每次启动执行
+  # 建表与初值(每次启动执行):schema.sql 带 IF NOT EXISTS 幂等;data.sql=首启种子口径(Task26)——
+  # sys_dict 固定 id INSERT IGNORE(管理页停用/调序/改名不重置),仅 sys_config(代码所有值型开关)先删后插重置
   sql:
     init:
       mode: always

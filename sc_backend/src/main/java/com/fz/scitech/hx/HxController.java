@@ -1,6 +1,7 @@
 package com.fz.scitech.hx;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.fz.scitech.common.BizException;
 import com.fz.scitech.common.Result;
 import com.fz.scitech.hx.dto.AcceptanceSaveDTO;
 import com.fz.scitech.hx.dto.ChangeSaveDTO;
@@ -44,16 +45,22 @@ public class HxController {
     }
 
     /**
-     * 用户简单搜索(登录可查):变更负责人 el-select 远程搜索用。
-     * 按用户名/姓名 LIKE,启用账号,至多 20 条;只回 id/username/name 三列,不泄露其余资料。
+     * 用户简单搜索:变更负责人 el-select 远程搜索用(teacher/admin 可用;viewer 拒——
+     * 不参与横向,spec §6.4,Task28 收紧)。
+     * 按用户名/姓名 LIKE(通配符 %/_ 转义,防一个 % 全表捞用户),启用账号,至多 20 条;
+     * 只回 id/username/name 三列,不泄露其余资料。
      */
     @GetMapping("/leaders")
-    public Result<List<Map<String, Object>>> leaders(@RequestParam(required = false) String q) {
+    public Result<List<Map<String, Object>>> leaders(@RequestParam(required = false) String q,
+                                                     HttpServletRequest request) {
+        if ("viewer".equals(role(request))) {
+            throw new BizException("只读账号不支持负责人搜索");
+        }
         List<Map<String, Object>> rows = new java.util.ArrayList<>();
         if (q == null || q.isBlank()) {
             return Result.ok(rows);
         }
-        String kw = q.trim();
+        String kw = escapeLike(q.trim());
         for (SysUser u : userMapper.selectList(new LambdaQueryWrapper<SysUser>()
                 .eq(SysUser::getStatus, 1)
                 .and(w -> w.like(SysUser::getUsername, kw).or().like(SysUser::getRealName, kw))
@@ -240,5 +247,13 @@ public class HxController {
 
     private String role(HttpServletRequest request) {
         return (String) request.getAttribute("role");
+    }
+
+    /**
+     * LIKE 通配符转义(Task28 收紧):\ % _ 前加 MySQL 默认转义符反斜杠,
+     * 防 q=% 一类输入当通配符全表匹配(MP like 的值是绑定参数,注入无虞,仅通配语义需封)。
+     */
+    private static String escapeLike(String s) {
+        return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
     }
 }
