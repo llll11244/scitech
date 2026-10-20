@@ -26,8 +26,6 @@ import com.fz.scitech.hx.mapper.RpMemberMapper;
 import com.fz.scitech.hx.mapper.RpProjectMapper;
 import com.fz.scitech.platform.attachment.RpAttachment;
 import com.fz.scitech.platform.attachment.mapper.RpAttachmentMapper;
-import com.fz.scitech.platform.template.PdfRenderService;
-import com.fz.scitech.platform.template.dto.RenderContext;
 import com.fz.scitech.system.entity.SysConfig;
 import com.fz.scitech.system.entity.SysDept;
 import com.fz.scitech.system.entity.SysDict;
@@ -89,8 +87,6 @@ public class HxService {
     private final RpBudgetMapper budgetMapper;
     private final RpAttachmentMapper attachmentMapper;
     private final RpFundingRecordMapper fundingMapper;
-    private final RenderModelBuilder modelBuilder;
-    private final PdfRenderService pdfRenderService;
     private final SysDeptMapper deptMapper;
     private final SysUserMapper userMapper;
     private final SysDictMapper dictMapper;
@@ -104,7 +100,6 @@ public class HxService {
     public HxService(RpProjectMapper projectMapper, RpHxProjectMapper hxMapper, RpHxFlowMapper flowMapper,
                      RpHxFlowRecordMapper recordMapper, RpMemberMapper memberMapper, RpBudgetMapper budgetMapper,
                      RpAttachmentMapper attachmentMapper, RpFundingRecordMapper fundingMapper,
-                     RenderModelBuilder modelBuilder, PdfRenderService pdfRenderService,
                      SysDeptMapper deptMapper, SysUserMapper userMapper, SysDictMapper dictMapper,
                      SysConfigMapper configMapper, MgmtFeePolicy mgmtFeePolicy, ObjectMapper objectMapper) {
         this.projectMapper = projectMapper;
@@ -115,8 +110,6 @@ public class HxService {
         this.budgetMapper = budgetMapper;
         this.attachmentMapper = attachmentMapper;
         this.fundingMapper = fundingMapper;
-        this.modelBuilder = modelBuilder;
-        this.pdfRenderService = pdfRenderService;
         this.deptMapper = deptMapper;
         this.userMapper = userMapper;
         this.dictMapper = dictMapper;
@@ -126,14 +119,15 @@ public class HxService {
     }
 
     // ---------- 登记草稿 ----------
-    /** 幂等:flowId 空新建(kind=2 草稿行+register 草稿流程单),非空整体覆盖(仅 status=0 可编辑) */
+    /**
+     * 幂等:flowId 空新建(kind=2 草稿行+register 草稿流程单),非空整体覆盖。
+     * HTML转正(2026-10-21):编辑门槛 {0,4}→{0,1,2,4}(审批通过前可改,决策②)。
+     */
     @Transactional
     public Long saveRegisterDraft(Long uid, String username, RegisterSaveDTO dto) {
         validateRegister(dto);
-        Long flowId;
-        RpProject project;
         if (dto.getFlowId() == null) {
-            project = new RpProject();
+            RpProject project = new RpProject();
             project.setKind(2);
             project.setAuditStatus(0);
             project.setApplyUserId(uid);
@@ -149,33 +143,45 @@ public class HxService {
             flow.setStatus(HxFlowStatus.DRAFT);
             flow.setCreateBy(username);
             flowMapper.insert(flow);
-            flowId = flow.getId();
-        } else {
-            RpHxFlow flow = ownedFlow(uid, dto.getFlowId());
-            // 退回单(4)也允许编辑(退回修改重交流程,Task24):改数据→resubmit;编辑不迁移状态
-            if (flow.getStatus() != HxFlowStatus.DRAFT && flow.getStatus() != HxFlowStatus.REJECTED) {
-                throw new BizException("仅草稿/退回单可编辑");
-            }
-            guardEditable(flow.getId(), "仅草稿/退回单可编辑");   // 条件占位防并发提交竞态(决策#34-②)
-            flowId = flow.getId();
-            project = projectMapper.selectById(flow.getProjectId());
-            project.setName(dto.getName());
-            project.setLeaderName(dto.getLeaderName());
-            project.setDeptId(dto.getDeptId());
-            // 编辑路径一律显式 .set(与下方 hx 扩展行/F1 同口径):NOT_NULL 策略下 updateById 跳过
-            // null 字段;name/leaderName/deptId 经 validateRegister 必填非空,显式写库防御后续字段放开
-            projectMapper.update(null, new LambdaUpdateWrapper<RpProject>()
-                    .eq(RpProject::getId, project.getId())
-                    .set(RpProject::getName, project.getName())
-                    .set(RpProject::getLeaderName, project.getLeaderName())
-                    .set(RpProject::getDeptId, project.getDeptId()));
+            applyRegisterData(project.getId(), dto, username);
+            return flow.getId();
         }
-        RpHxProject hx = hxMapper.selectById(project.getId());
+        RpHxFlow flow = ownedFlow(uid, dto.getFlowId());
+        applyRegisterEdit(flow, dto, username, "仅审批通过前可编辑");
+        return flow.getId();
+    }
+
+    /**
+     * 编辑态持久化(教师 1/2/4 态代保存与 admin 代改共用,HxAuditService 调):
+     * project 三字段 + 扩展/成员/预算整体覆盖;guardEditable 条件占位防并发竞态(决策#34-②)。
+     */
+    void applyRegisterEdit(RpHxFlow flow, RegisterSaveDTO dto, String operator, String rejectMsg) {
+        if (!editableBeforeApprove(flow.getStatus())) {
+            throw new BizException(rejectMsg);
+        }
+        guardEditable(flow.getId(), rejectMsg);
+        RpProject project = projectMapper.selectById(flow.getProjectId());
+        project.setName(dto.getName());
+        project.setLeaderName(dto.getLeaderName());
+        project.setDeptId(dto.getDeptId());
+        // 编辑路径一律显式 .set(与 hx 扩展行/F1 同口径):NOT_NULL 策略下 updateById 跳过
+        // null 字段;name/leaderName/deptId 经 validateRegister 必填非空,显式写库防御后续字段放开
+        projectMapper.update(null, new LambdaUpdateWrapper<RpProject>()
+                .eq(RpProject::getId, project.getId())
+                .set(RpProject::getName, project.getName())
+                .set(RpProject::getLeaderName, project.getLeaderName())
+                .set(RpProject::getDeptId, project.getDeptId()));
+        applyRegisterData(project.getId(), dto, operator);
+    }
+
+    /** 扩展段/成员/预算整体覆盖(新建与编辑共用;管理费金额后端换算,提交即快照) */
+    private void applyRegisterData(Long projectId, RegisterSaveDTO dto, String operator) {
+        RpHxProject hx = hxMapper.selectById(projectId);
         boolean hxNew = hx == null;
         if (hxNew) {
             hx = new RpHxProject();
-            hx.setProjectId(project.getId());
-            hx.setCreateBy(username);
+            hx.setProjectId(projectId);
+            hx.setCreateBy(operator);
         }
         copyHx(dto.getHx(), hx);
         // 管理费金额后端换算(比例=科技处配置,教师不可设):覆盖入参,收取关掉→null;每次保存重算,提交即快照
@@ -183,8 +189,8 @@ public class HxService {
         if (hxNew) {
             hxMapper.insert(hx);
         } else {
-            // 同 F1:NOT_NULL 策略下 updateById 跳过实体 null 字段——教师清空「管理费金额/简介/进度/
-            // 邮箱」等可选字段后旧值残留,且会渲进待签件污染交付物——表单字段显式 .set 整体覆盖(null 也写);
+            // 同 F1:NOT_NULL 策略下 updateById 跳过实体 null 字段——教师清空「简介/进度/邮箱」等
+            // 可选字段后旧值残留——表单字段显式 .set 整体覆盖(null 也写);
             // hxRegisterDate/verifiedAmount 非表单字段(科技处确认/验收时写入)不在覆盖之列
             hxMapper.update(null, new LambdaUpdateWrapper<RpHxProject>()
                     .eq(RpHxProject::getProjectId, hx.getProjectId())
@@ -201,13 +207,15 @@ public class HxService {
                     .set(RpHxProject::getProjectSummary, hx.getProjectSummary())
                     .set(RpHxProject::getProgressPlan, hx.getProgressPlan()));
         }
-        replaceMembers(project.getId(), dto.getMembers(), username);
-        replaceBudgets(project.getId(), dto.getBudgets(), username);
-        return flowId;
+        replaceMembers(projectId, dto.getMembers(), operator);
+        replaceBudgets(projectId, dto.getBudgets(), operator);
     }
 
-    /** 必填校验:名称/负责人/院部/类型/委托单位/性质/经费/起止(成员行姓名空则不落库,见 replaceMembers) */
-    private void validateRegister(RegisterSaveDTO dto) {
+    /**
+     * 必填+字数校验(保存/提交/admin 代改同口径):名称/负责人/院部/类型/委托单位/性质/经费/起止;
+     * 字数上限与前端 maxlength 同值(HTML转正 决策:后端拒保存)。
+     */
+    void validateRegister(RegisterSaveDTO dto) {
         if (isBlank(dto.getName()) || isBlank(dto.getLeaderName()) || dto.getDeptId() == null) {
             throw new BizException("项目名称/负责人/院部必填");
         }
@@ -217,6 +225,89 @@ public class HxService {
                 || isBlank(h.getStartDate()) || isBlank(h.getEndDate())) {
             throw new BizException("项目类型/委托单位/性质/合同经费/起止时间必填");
         }
+        if (h.getContractAmount().signum() <= 0) {
+            throw new BizException("合同经费必须大于 0");
+        }
+        lenCheck(dto.getName(), 100, "项目名称");
+        lenCheck(dto.getLeaderName(), 64, "负责人姓名");
+        lenCheck(h.getClientName(), 255, "委托单位名称");
+        lenCheck(h.getLeaderEmail(), 128, "电子邮箱");
+        lenCheck(h.getProjectSummary(), 800, "项目简介");
+        lenCheck(h.getProgressPlan(), 800, "项目计划进度");
+    }
+
+    /** 规则R1(HTML转正 决策④):非「不受限」科目合计=合同经费;提交/admin 代改强制,draft 允许半成品 */
+    void validateRegisterBudgets(Long projectId, BigDecimal contractAmount) {
+        BigDecimal sum = BigDecimal.ZERO;
+        for (RpBudget b : budgetMapper.selectList(new LambdaQueryWrapper<RpBudget>()
+                .eq(RpBudget::getProjectId, projectId))) {
+            boolean free = b.getUnrestricted() != null && b.getUnrestricted() == 1;
+            if (!free && b.getAmount() != null) {
+                sum = sum.add(b.getAmount());
+            }
+        }
+        if (sum.compareTo(contractAmount) != 0) {
+            throw new BizException("预算合计(" + plain(sum) + ")须等于合同经费(" + plain(contractAmount)
+                    + ")元;勾选「合同约定不受限」的科目不计入合计");
+        }
+    }
+
+    /** 验收必填(提交/admin 代改强制;与前端 rules 同清单) */
+    void validateAcceptanceRequired(RpHxFlow flow) {
+        if (flow.getUsedAmount() == null || flow.getIsOnTime() == null || isBlank(flow.getOutcomeForm())
+                || isBlank(flow.getAcceptSummary()) || isBlank(flow.getReportContent())) {
+            throw new BizException("使用经费/是否按期完成/成果形式/完成情况总结/验收报告正文必填");
+        }
+        if (flow.getUsedAmount().signum() < 0) {
+            throw new BizException("使用经费不能为负数");
+        }
+    }
+
+    /** 规则R3-R6:验收金额核算(比例合计=100%、金额合计=到账、使用≤到账、无到账拒) */
+    void validateAcceptanceAmounts(Long projectId, RpHxFlow flow) {
+        BigDecimal received = receivedTotal(projectId);
+        if (received == null || received.signum() <= 0) {
+            throw new BizException("暂无到账记录,请联系科技处录入到账后再提交验收");
+        }
+        if (flow.getUsedAmount() != null && flow.getUsedAmount().compareTo(received) > 0) {
+            throw new BizException("使用经费(" + plain(flow.getUsedAmount()) + ")不得超过到账经费("
+                    + plain(received) + ")元");
+        }
+        BigDecimal ratioSum = BigDecimal.ZERO;
+        BigDecimal amountSum = BigDecimal.ZERO;
+        for (RpMember m : memberMapper.selectList(new LambdaQueryWrapper<RpMember>()
+                .eq(RpMember::getProjectId, projectId)
+                .ne(RpMember::getMemberType, "学生"))) {
+            if (m.getRatio() != null) {
+                ratioSum = ratioSum.add(m.getRatio());
+            }
+            if (m.getAmount() != null) {
+                amountSum = amountSum.add(m.getAmount());
+            }
+        }
+        if (ratioSum.compareTo(BigDecimal.valueOf(100)) != 0) {
+            throw new BizException("成员比例合计(" + plain(ratioSum) + "%)须等于 100%");
+        }
+        if (amountSum.compareTo(received) != 0) {
+            throw new BizException("成员金额合计(" + plain(amountSum) + ")须等于到账经费(" + plain(received) + ")元");
+        }
+    }
+
+    /** 字数硬校验(HTML转正):null 跳过;超限拒保存(与前端 maxlength 同值) */
+    static void lenCheck(String v, int max, String label) {
+        if (v != null && v.length() > max) {
+            throw new BizException(label + "超过 " + max + " 字");
+        }
+    }
+
+    /** 金额提示用(去尾零,355000.00→355000) */
+    static String plain(BigDecimal v) {
+        return v == null ? "" : v.stripTrailingZeros().toPlainString();
+    }
+
+    /** 审批通过前(0/1/2/4)可编辑(HTML转正 决策②:提交后仍可改,通过即锁定) */
+    static boolean editableBeforeApprove(Integer status) {
+        return status != null && status != HxFlowStatus.APPROVED;
     }
 
     // ---------- 提交(生成待签双出) ----------
@@ -228,6 +319,7 @@ public class HxService {
         }
         RegisterSaveDTO dto = loadRegisterDto(flow.getProjectId()); // 反查实体拼 DTO 复用校验
         validateRegister(dto);
+        validateRegisterBudgets(flow.getProjectId(), dto.getHx().getContractAmount());   // 规则R1
         transit(flowId, HxFlowStatus.DRAFT, HxFlowStatus.SUBMITTED);
         flowMapper.update(null, new LambdaUpdateWrapper<RpHxFlow>()
                 .eq(RpHxFlow::getId, flowId).set(RpHxFlow::getSubmitTime, LocalDateTime.now()));
@@ -235,7 +327,7 @@ public class HxService {
                 .eq(RpProject::getId, flow.getProjectId())
                 .set(RpProject::getAuditStatus, 1)
                 .set(RpProject::getDeclareDate, LocalDate.now()));
-        renderDeliverables(flow, uid, username);   // 双出 docx+pdf(失败即整体回滚=决策#34-③)
+        // HTML转正(决策①):待签件=教师浏览器打印 A4/另存 PDF,不再生成 docx 双出
         saveRecord(flow, HxFlowStatus.ACT_SUBMIT, username, uid, null);
     }
 
@@ -249,6 +341,7 @@ public class HxService {
         RpProject project = ownedProject(uid, dto.getProjectId());
         LocalDate newEndDate = parseDate(dto.getNewEndDate());   // 格式先验,再联动必填
         validateChange(dto.getChangeType(), dto.getNewAmount(), newEndDate, dto.getNewLeaderId());
+        validateChangeTexts(dto);
         guardChangeUnique(project.getId(), dto.getFlowId());
         RpHxFlow flow;
         if (dto.getFlowId() == null) {
@@ -257,34 +350,60 @@ public class HxService {
             flow.setFlowType("change");
             flow.setStatus(HxFlowStatus.DRAFT);
             flow.setCreateBy(username);
-        } else {
-            flow = editableDraftFlow(uid, dto.getFlowId(), "change", dto.getProjectId());
-        }
-        flow.setChangeType(dto.getChangeType());
-        flow.setChangeContent(dto.getChangeContent());
-        flow.setChangeReason(dto.getChangeReason());
-        flow.setNewAmount(dto.getNewAmount());
-        flow.setNewEndDate(newEndDate);
-        flow.setNewLeaderId(dto.getNewLeaderId());
-        if (dto.getFlowId() == null) {
+            applyChangeData(flow, dto);
             flowMapper.insert(flow);
         } else {
-            // NOT_NULL 字段策略下 updateById 跳过实体 null 字段:教师勾掉「项目经费/执行周期/负责人」
-            // 后 DTO 置 null 的字段旧值残留,与"整体覆盖"语义相悖——编辑路径改显式 .set(null 也写)
-            flowMapper.update(null, new LambdaUpdateWrapper<RpHxFlow>()
-                    .eq(RpHxFlow::getId, flow.getId())
-                    .set(RpHxFlow::getChangeType, flow.getChangeType())
-                    .set(RpHxFlow::getChangeContent, flow.getChangeContent())
-                    .set(RpHxFlow::getChangeReason, flow.getChangeReason())
-                    .set(RpHxFlow::getNewAmount, flow.getNewAmount())
-                    .set(RpHxFlow::getNewEndDate, flow.getNewEndDate())
-                    .set(RpHxFlow::getNewLeaderId, flow.getNewLeaderId()));
+            flow = editableDraftFlow(uid, dto.getFlowId(), "change", dto.getProjectId());
+            applyChangeEdit(flow, dto, "仅审批通过前可编辑");
         }
         return flow.getId();
     }
 
-    /** 变更必填联动:change_type 含「项目经费」→newAmount;「执行周期」→newEndDate;「项目负责人」→newLeaderId 且须已有账号 */
-    private void validateChange(String changeType, BigDecimal newAmount, LocalDate newEndDate, Long newLeaderId) {
+    /** 变更文本字数(教师保存与 admin 代改共用) */
+    void validateChangeTexts(ChangeSaveDTO dto) {
+        lenCheck(dto.getChangeContent(), 500, "变更内容");
+        lenCheck(dto.getChangeReason(), 300, "申请变更的原因");
+    }
+
+    /** 变更单据字段整体赋值(教师保存与 admin 代改共用) */
+    void applyChangeData(RpHxFlow flow, ChangeSaveDTO dto) {
+        flow.setChangeType(dto.getChangeType());
+        flow.setChangeContent(dto.getChangeContent());
+        flow.setChangeReason(dto.getChangeReason());
+        flow.setNewAmount(dto.getNewAmount());
+        flow.setNewEndDate(parseDate(dto.getNewEndDate()));
+        flow.setNewLeaderId(dto.getNewLeaderId());
+    }
+
+    /** 变更编辑态持久化(教师 1/2/4 态与 admin 代改共用):条件占位+整体覆盖+触碰 update_time */
+    void applyChangeEdit(RpHxFlow flow, ChangeSaveDTO dto, String rejectMsg) {
+        if (!editableBeforeApprove(flow.getStatus())) {
+            throw new BizException(rejectMsg);
+        }
+        guardEditable(flow.getId(), rejectMsg);
+        applyChangeData(flow, dto);
+        updateChangeRow(flow);
+    }
+
+    /**
+     * 变更编辑路径落库:显式 .set 整体覆盖(null 也写)——NOT_NULL 策略下 updateById 跳过实体 null
+     * 字段,教师/admin 勾掉「项目经费/执行周期/负责人」后 DTO 置 null 的字段旧值残留;
+     * 显式触碰 update_time=滞后判定依据(HTML转正:回扫后改数据→打印/扫描件差异提示)。
+     */
+    void updateChangeRow(RpHxFlow flow) {
+        flowMapper.update(null, new LambdaUpdateWrapper<RpHxFlow>()
+                .eq(RpHxFlow::getId, flow.getId())
+                .set(RpHxFlow::getChangeType, flow.getChangeType())
+                .set(RpHxFlow::getChangeContent, flow.getChangeContent())
+                .set(RpHxFlow::getChangeReason, flow.getChangeReason())
+                .set(RpHxFlow::getNewAmount, flow.getNewAmount())
+                .set(RpHxFlow::getNewEndDate, flow.getNewEndDate())
+                .set(RpHxFlow::getNewLeaderId, flow.getNewLeaderId())
+                .set(RpHxFlow::getUpdateTime, LocalDateTime.now()));
+    }
+
+    /** 变更必填联动(包级:admin 代改复用):change_type 含「项目经费」→newAmount;「执行周期」→newEndDate;「项目负责人」→newLeaderId 且须已有账号 */
+    void validateChange(String changeType, BigDecimal newAmount, LocalDate newEndDate, Long newLeaderId) {
         if (isBlank(changeType)) {
             throw new BizException("变更类型必填");
         }
@@ -292,6 +411,9 @@ public class HxService {
         List<String> types = Arrays.stream(changeType.split(",")).map(String::trim).collect(Collectors.toList());
         if (types.contains("项目经费") && newAmount == null) {
             throw new BizException("变更类型含「项目经费」,须填写变更后经费");
+        }
+        if (newAmount != null && newAmount.signum() <= 0) {
+            throw new BizException("变更后经费必须大于 0");
         }
         if (types.contains("执行周期") && newEndDate == null) {
             throw new BizException("变更类型含「执行周期」,须填写变更后结束时间");
@@ -338,7 +460,7 @@ public class HxService {
                 .eq(RpHxFlow::getId, flowId)
                 .set(RpHxFlow::getSubmitTime, LocalDateTime.now())
                 .set(RpHxFlow::getBeforeJson, beforeJson));
-        renderDeliverables(flow, uid, username);
+        // HTML转正(决策①):不再生成 docx 双出
         saveRecord(flow, HxFlowStatus.ACT_SUBMIT, username, uid, null);
     }
 
@@ -350,6 +472,7 @@ public class HxService {
     @Transactional
     public Long saveAcceptanceDraft(Long uid, String username, AcceptanceSaveDTO dto) {
         RpProject project = ownedProject(uid, dto.getProjectId());
+        validateAcceptanceTexts(dto);
         guardAcceptanceSingle(project.getId(), dto.getFlowId());
         RpHxFlow flow;
         if (dto.getFlowId() == null) {
@@ -358,29 +481,54 @@ public class HxService {
             flow.setFlowType("acceptance");
             flow.setStatus(HxFlowStatus.DRAFT);
             flow.setCreateBy(username);
+            applyAcceptanceData(flow, dto);
+            flowMapper.insert(flow);
+            replaceMembers(project.getId(), dto.getMembers(), username);
         } else {
             flow = editableDraftFlow(uid, dto.getFlowId(), "acceptance", dto.getProjectId());
+            applyAcceptanceEdit(flow, dto, username, "仅审批通过前可编辑");
         }
+        return flow.getId();
+    }
+
+    /** 验收文本字数(保存级;必填/金额在提交与 admin 代改时校验) */
+    void validateAcceptanceTexts(AcceptanceSaveDTO dto) {
+        lenCheck(dto.getAcceptSummary(), 1000, "项目完成情况总结");
+        lenCheck(dto.getReportContent(), 20000, "验收报告正文");
+    }
+
+    /** 验收编辑态持久化(教师 1/2/4 态与 admin 代改共用):条件占位+整体覆盖+成员全量+触碰 update_time */
+    void applyAcceptanceEdit(RpHxFlow flow, AcceptanceSaveDTO dto, String operator, String rejectMsg) {
+        if (!editableBeforeApprove(flow.getStatus())) {
+            throw new BizException(rejectMsg);
+        }
+        guardEditable(flow.getId(), rejectMsg);
+        applyAcceptanceData(flow, dto);
+        updateAcceptanceRow(flow);
+        replaceMembers(flow.getProjectId(), dto.getMembers(), operator);
+    }
+
+    /** 验收单据字段整体赋值(教师保存与 admin 代改共用) */
+    void applyAcceptanceData(RpHxFlow flow, AcceptanceSaveDTO dto) {
         flow.setUsedAmount(dto.getUsedAmount());
+        flow.setFinishDate(parseDate(dto.getFinishDate()));
         flow.setIsOnTime(dto.getIsOnTime());
         flow.setOutcomeForm(dto.getOutcomeForm());
         flow.setAcceptSummary(dto.getAcceptSummary());
         flow.setReportContent(dto.getReportContent());
-        if (dto.getFlowId() == null) {
-            flowMapper.insert(flow);
-        } else {
-            // 同变更编辑路径:NOT_NULL 策略下 updateById 跳过 null 字段(教师清空 isOnTime/usedAmount
-            // 等可空表单字段时旧值残留),改显式 .set 整体覆盖(null 也写)
-            flowMapper.update(null, new LambdaUpdateWrapper<RpHxFlow>()
-                    .eq(RpHxFlow::getId, flow.getId())
-                    .set(RpHxFlow::getUsedAmount, flow.getUsedAmount())
-                    .set(RpHxFlow::getIsOnTime, flow.getIsOnTime())
-                    .set(RpHxFlow::getOutcomeForm, flow.getOutcomeForm())
-                    .set(RpHxFlow::getAcceptSummary, flow.getAcceptSummary())
-                    .set(RpHxFlow::getReportContent, flow.getReportContent()));
-        }
-        replaceMembers(project.getId(), dto.getMembers(), username);
-        return flow.getId();
+    }
+
+    /** 验收编辑路径落库:显式 .set 整体覆盖(null 也写)+触碰 update_time(滞后判定) */
+    void updateAcceptanceRow(RpHxFlow flow) {
+        flowMapper.update(null, new LambdaUpdateWrapper<RpHxFlow>()
+                .eq(RpHxFlow::getId, flow.getId())
+                .set(RpHxFlow::getUsedAmount, flow.getUsedAmount())
+                .set(RpHxFlow::getFinishDate, flow.getFinishDate())
+                .set(RpHxFlow::getIsOnTime, flow.getIsOnTime())
+                .set(RpHxFlow::getOutcomeForm, flow.getOutcomeForm())
+                .set(RpHxFlow::getAcceptSummary, flow.getAcceptSummary())
+                .set(RpHxFlow::getReportContent, flow.getReportContent())
+                .set(RpHxFlow::getUpdateTime, LocalDateTime.now()));
     }
 
     /** 每项目至多 1 张验收单(任何 status,约束#3;编辑自身除外) */
@@ -406,54 +554,13 @@ public class HxService {
             throw new BizException("仅草稿可提交");
         }
         requireConfirmed(flow.getProjectId(), "验收单");
+        validateAcceptanceRequired(flow);
+        validateAcceptanceAmounts(flow.getProjectId(), flow);
         transit(flowId, HxFlowStatus.DRAFT, HxFlowStatus.SUBMITTED);
         flowMapper.update(null, new LambdaUpdateWrapper<RpHxFlow>()
                 .eq(RpHxFlow::getId, flowId).set(RpHxFlow::getSubmitTime, LocalDateTime.now()));
-        renderDeliverables(flow, uid, username);
+        // HTML转正(决策①):待签两张(验收登记表+验收报告)=教师浏览器分别打印,不再生成 docx 双出
         saveRecord(flow, HxFlowStatus.ACT_SUBMIT, username, uid, null);
-    }
-
-    /**
-     * 渲染待签交付物:render 双出落盘+附件登记;旧版按完整前缀 hx/{pid}/{flowType}/{fid}/ 作废。
-     * 验收单渲两张(hx_acceptance+hx_report,双出×2=4 附件,Task21),flowType 同为 acceptance,
-     * 前缀作废天然覆盖两张;biz_type 由 PdfRenderService 按 tplType 推导(hx_report→hx_report_*)。
-     */
-    private void renderDeliverables(RpHxFlow flow, Long uid, String username) {
-        RpProject p = projectMapper.selectById(flow.getProjectId());
-        fillTransient(p);
-        RpHxProject hx = requireHx(flow.getProjectId());
-        switch (flow.getFlowType()) {
-            case "register" -> {
-                invalidateOld(flow, flow.getFlowType(), null, "hx_docx", "hx_pdf");
-                pdfRenderService.render(new RenderContext(flow.getId(), flow.getProjectId(),
-                                flow.getFlowType(), "hx_register", uid, username, false),
-                        modelBuilder.buildRegister(p, hx,
-                                memberMapper.selectList(new LambdaQueryWrapper<RpMember>()
-                                        .eq(RpMember::getProjectId, flow.getProjectId())
-                                        .orderByAsc(RpMember::getSortNo)),
-                                budgetMapper.selectList(new LambdaQueryWrapper<RpBudget>()
-                                        .eq(RpBudget::getProjectId, flow.getProjectId()))));
-            }
-            case "change" -> {
-                invalidateOld(flow, flow.getFlowType(), null, "hx_docx", "hx_pdf");
-                pdfRenderService.render(new RenderContext(flow.getId(), flow.getProjectId(),
-                                flow.getFlowType(), "hx_change", uid, username, false),
-                        modelBuilder.buildChange(p, hx, flow, p.getLeaderPhone()));
-            }
-            case "acceptance" -> {
-                invalidateOld(flow, flow.getFlowType(), null,
-                        "hx_docx", "hx_pdf", "hx_report_docx", "hx_report_pdf");
-                List<RpMember> members = memberMapper.selectList(new LambdaQueryWrapper<RpMember>()
-                        .eq(RpMember::getProjectId, flow.getProjectId()).orderByAsc(RpMember::getSortNo));
-                pdfRenderService.render(new RenderContext(flow.getId(), flow.getProjectId(),
-                                flow.getFlowType(), "hx_acceptance", uid, username, false),
-                        modelBuilder.buildAcceptance(p, hx, flow, members, receivedTotal(flow.getProjectId())));
-                pdfRenderService.render(new RenderContext(flow.getId(), flow.getProjectId(),
-                                flow.getFlowType(), "hx_report", uid, username, false),
-                        modelBuilder.buildReport(p, hx, flow));
-            }
-            default -> throw new BizException("未知流程类型:" + flow.getFlowType());
-        }
     }
 
     /**
@@ -488,9 +595,9 @@ public class HxService {
 
     // ---------- 退回修改重交(三流程共用,Task24) ----------
     /**
-     * 退回单重交(spec §3.2):status 4→1,重新渲染待签双出;
-     * 旧待签件由 renderDeliverables 前缀作废,旧扫描件一并作废(需重新盖章回扫)。
-     * 教师改数据走 saveXxxDraft(status=4 允许编辑),不改也可直接重交。
+     * 退回单重交(spec §3.2):status 4→1;旧扫描件一并作废(需重新盖章回扫)。
+     * HTML转正(决策①):不再重渲待签 docx,教师重交后自行重新打印;教师改数据走
+     * saveXxxDraft(0/1/2/4 可编辑),不改也可直接重交。
      */
     @Transactional
     public void resubmit(Long uid, String username, Long flowId) {
@@ -499,8 +606,7 @@ public class HxService {
             throw new BizException("仅退回单可重交");
         }
         transit(flowId, HxFlowStatus.REJECTED, HxFlowStatus.SUBMITTED);
-        invalidateOld(flow, "scan", null, "hx_scan");   // 旧扫描件作废(§3.2:重新生成 PDF 须重新盖章)
-        renderDeliverables(flow, uid, username);        // 旧待签作废+重渲(内部按前缀处理)
+        invalidateOld(flow, "scan", null, "hx_scan");   // 旧扫描件作废(重交须重新盖章回扫)
         saveRecord(flow, HxFlowStatus.ACT_RESUBMIT, username, uid, null);
     }
 
@@ -665,6 +771,10 @@ public class HxService {
         vo.setRecords(recordMapper.selectList(new LambdaQueryWrapper<RpHxFlowRecord>()
                 .eq(RpHxFlowRecord::getFlowId, flowId).orderByAsc(RpHxFlowRecord::getId)));
         vo.setDeliverPdfVisible(readConfig("deliver_pdf_visible"));
+        // 验收单:到账累计只读带出(金额校验 R4 基准,教师不可填)
+        if ("acceptance".equals(flow.getFlowType())) {
+            vo.setReceivedTotal(receivedTotal(flow.getProjectId()));
+        }
         // 变更单回显:变更后负责人姓名(N4 Task26,N3 缓期项——审批对照/教师端展示用)
         if (flow.getNewLeaderId() != null) {
             SysUser newLeader = userMapper.selectById(flow.getNewLeaderId());
@@ -673,95 +783,7 @@ public class HxService {
         return vo;
     }
 
-    // ---------- 填报分屏预览 ----------
-    /**
-     * 表单数据直出 docx 预览流(决策#36+直出Word):不落库不落盘,DTO→内存实体→renderDocxStream。
-     * register=DTO 自包含;change/acceptance 表头字段来自项目实态(按 projectId 查库,归属校验防越权探测);
-     * acceptance 双模板由 tplType 区分(hx_acceptance=验收登记表/hx_report=验收报告,缺省验收登记表)。
-     */
-    public byte[] previewDocx(String flowType, String tplType, Map<String, Object> data, Long uid) {
-        if (flowType == null || data == null) {
-            throw new BizException("flowType/data 必填");
-        }
-        switch (flowType) {
-            case "register" -> {
-                RegisterSaveDTO dto = objectMapper.convertValue(data, RegisterSaveDTO.class);
-                RpProject p = new RpProject();
-                p.setApplyUserId(uid);
-                p.setName(dto.getName());
-                p.setLeaderName(dto.getLeaderName());
-                p.setDeptId(dto.getDeptId());
-                fillTransient(p);   // deptName/leaderPhone=登记表占位符数据源
-                RpHxProject hx = new RpHxProject();
-                if (dto.getHx() != null) {
-                    copyHx(dto.getHx(), hx);
-                    // 与保存同口径:预览即最终落库口径(金额=配置比例换算,不取表单传值)
-                    hx.setMgmtFeeAmount(mgmtFeePolicy.compute(hx.getChargeMgmtFee(), hx.getContractAmount()));
-                }
-                List<RpMember> members = new ArrayList<>();
-                if (dto.getMembers() != null) {
-                    for (MemberDTO m : dto.getMembers()) {
-                        if (m == null || isBlank(m.getName())) {
-                            continue;
-                        }
-                        members.add(toMemberEntity(m, null, null));
-                    }
-                }
-                List<RpBudget> budgets = new ArrayList<>();
-                if (dto.getBudgets() != null) {
-                    for (BudgetDTO b : dto.getBudgets()) {
-                        if (b == null || isBlank(b.getSubject()) || b.getAmount() == null) {
-                            continue;
-                        }
-                        budgets.add(toBudgetEntity(b, null, null));
-                    }
-                }
-                return pdfRenderService.renderDocxStream("hx_register",
-                        modelBuilder.buildRegister(p, hx, members, budgets));
-            }
-            case "change" -> {
-                ChangeSaveDTO dto = objectMapper.convertValue(data, ChangeSaveDTO.class);
-                RpProject p = ownedProject(uid, dto.getProjectId());
-                fillTransient(p);
-                RpHxFlow f = new RpHxFlow();   // 内存流程单:变更表数据全来自表单
-                f.setChangeType(dto.getChangeType());
-                f.setChangeContent(dto.getChangeContent());
-                f.setChangeReason(dto.getChangeReason());
-                return pdfRenderService.renderDocxStream("hx_change",
-                        modelBuilder.buildChange(p, requireHx(p.getId()), f, p.getLeaderPhone()));
-            }
-            case "acceptance" -> {
-                AcceptanceSaveDTO dto = objectMapper.convertValue(data, AcceptanceSaveDTO.class);
-                RpProject p = ownedProject(uid, dto.getProjectId());
-                fillTransient(p);
-                RpHxProject hx = requireHx(p.getId());
-                RpHxFlow f = new RpHxFlow();
-                f.setUsedAmount(dto.getUsedAmount());
-                f.setIsOnTime(dto.getIsOnTime());
-                f.setOutcomeForm(dto.getOutcomeForm());
-                f.setAcceptSummary(dto.getAcceptSummary());
-                f.setReportContent(dto.getReportContent());
-                if ("hx_report".equals(tplType)) {
-                    return pdfRenderService.renderDocxStream("hx_report",
-                            modelBuilder.buildReport(p, hx, f));
-                }
-                List<RpMember> members = new ArrayList<>();
-                if (dto.getMembers() != null) {
-                    for (MemberDTO m : dto.getMembers()) {
-                        if (m == null || isBlank(m.getName())) {
-                            continue;
-                        }
-                        members.add(toMemberEntity(m, null, null));
-                    }
-                }
-                return pdfRenderService.renderDocxStream("hx_acceptance",
-                        modelBuilder.buildAcceptance(p, hx, f, members, receivedTotal(p.getId())));
-            }
-            default -> throw new BizException("未知流程类型:" + flowType);
-        }
-    }
-
-    /** 项目扩展行必在(登记保存即建);缺失=数据异常,防御 NPE 直接拒(包级:HxAuditService 终版渲染复用) */
+    /** 项目扩展行必在(登记保存即建);缺失=数据异常,防御 NPE 直接拒(包级:HxAuditService 复用) */
     RpHxProject requireHx(Long projectId) {
         RpHxProject hx = hxMapper.selectById(projectId);
         if (hx == null) {
@@ -901,8 +923,8 @@ public class HxService {
         if (!flowType.equals(flow.getFlowType())) {
             throw new BizException("流程单类型不符");
         }
-        if (flow.getStatus() != HxFlowStatus.DRAFT && flow.getStatus() != HxFlowStatus.REJECTED) {
-            throw new BizException("仅草稿/退回单可编辑");
+        if (!editableBeforeApprove(flow.getStatus())) {
+            throw new BizException("仅审批通过前可编辑");
         }
         if (!flow.getProjectId().equals(projectId)) {
             throw new BizException("流程单与项目不一致");
@@ -971,7 +993,8 @@ public class HxService {
     private void guardEditable(Long flowId, String rejectMsg) {
         int rows = flowMapper.update(null, new LambdaUpdateWrapper<RpHxFlow>()
                 .eq(RpHxFlow::getId, flowId)
-                .in(RpHxFlow::getStatus, HxFlowStatus.DRAFT, HxFlowStatus.REJECTED)
+                .in(RpHxFlow::getStatus, HxFlowStatus.DRAFT, HxFlowStatus.SUBMITTED,
+                        HxFlowStatus.SCANNED, HxFlowStatus.REJECTED)
                 .set(RpHxFlow::getUpdateTime, LocalDateTime.now()));
         if (rows == 0) {
             throw new BizException(rejectMsg);
@@ -1037,6 +1060,14 @@ public class HxService {
             if (m == null || isBlank(m.getName())) {
                 continue;
             }
+            lenCheck(m.getEmployeeNo(), 32, "成员工号");
+            lenCheck(m.getName(), 64, "成员姓名");
+            lenCheck(m.getUnit(), 255, "成员所在单位");
+            lenCheck(m.getTitle(), 32, "成员职称/职务");
+            lenCheck(m.getMajor(), 64, "成员专业");
+            lenCheck(m.getDuty(), 500, "成员工作任务");
+            lenCheck(m.getStudentNo(), 32, "学号");
+            lenCheck(m.getMentor(), 64, "指导老师");
             RpMember e = toMemberEntity(m, projectId, createBy);
             if (e.getSortNo() == null) {
                 e.setSortNo(sort);
@@ -1053,7 +1084,8 @@ public class HxService {
             return;
         }
         for (BudgetDTO b : budgets) {
-            if (b == null || isBlank(b.getSubject()) || b.getAmount() == null) {
+            // 不受限科目允许金额空(归零落库),其余金额空=不列支跳过
+            if (b == null || isBlank(b.getSubject()) || (b.getAmount() == null && !unrestricted(b))) {
                 continue;
             }
             budgetMapper.insert(toBudgetEntity(b, projectId, createBy));
@@ -1064,6 +1096,7 @@ public class HxService {
         RpMember e = new RpMember();
         e.setProjectId(projectId);
         e.setMemberType(m.getMemberType());
+        e.setEmployeeNo(m.getEmployeeNo());
         e.setName(m.getName());
         e.setUnit(m.getUnit());
         e.setTitle(m.getTitle());
@@ -1082,9 +1115,15 @@ public class HxService {
         RpBudget e = new RpBudget();
         e.setProjectId(projectId);
         e.setSubject(b.getSubject());
-        e.setAmount(b.getAmount());
+        // 不受限科目金额归零(规则R2:不计入合计,打印显示口径文字)
+        e.setAmount(Boolean.TRUE.equals(unrestricted(b)) ? BigDecimal.ZERO : b.getAmount());
+        e.setUnrestricted(Boolean.TRUE.equals(unrestricted(b)) ? 1 : 0);
         e.setCreateBy(createBy);
         return e;
+    }
+
+    private static boolean unrestricted(BudgetDTO b) {
+        return b.getUnrestricted() != null && b.getUnrestricted() == 1;
     }
 
     /** DTO 扩展段 → rp_hx_project(日期字符串 yyyy-MM-dd 解析) */
@@ -1121,7 +1160,8 @@ public class HxService {
         return c == null ? "false" : c.getConfigValue();
     }
 
-    private static LocalDate parseDate(String s) {
+    /** yyyy-MM-dd 宽松解析(包级:HxAuditService admin 代改复用);非法/null→null */
+    static LocalDate parseDate(String s) {
         if (isBlank(s)) {
             return null;
         }

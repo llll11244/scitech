@@ -6,6 +6,10 @@
         :title="`已被科技处退回:${rejectOpinion.actionLabel}`"
         :description="`${rejectOpinion.opinion}(重交后原盖章件作废,需重新盖章回扫;可先修改数据再重交)`" />
 
+      <!-- 数据滞后:回扫后填报数据又被修改(教师或科技处),已盖章扫描件对应旧数据 -->
+      <el-alert v-if="dataStale" type="error" :closable="false" class="mb"
+        title="填报数据在回扫后被修改:当前盖章扫描件对应旧数据,请重新打印盖章并回扫。" />
+
       <!-- 状态头 -->
       <el-card shadow="never" class="mb">
         <div class="head-bar">
@@ -80,37 +84,21 @@
 
         <!-- 右:交付 + 扫描件 + 操作 -->
         <el-col :span="10">
-          <!-- 待签交付下载 -->
+          <!-- 待签交付(HTML即交付):打印/另存 PDF 为主;旧单历史 Word 降级保留 -->
           <el-card shadow="never" class="mb">
-            <template #header>待签文件下载</template>
-            <el-alert v-if="d.flow.status >= 1" type="warning" :closable="false" class="mb"
-              :title="printTip" />
+            <template #header>待签文件</template>
             <template v-if="d.flow.status >= 1">
               <div class="deliver-row" v-for="doc in deliverDocs" :key="doc.type">
                 <span class="doc-name">{{ doc.label }}</span>
-                <el-button size="small" type="primary" @click="download(doc, 'docx')">
-                  下载 Word
+                <el-button size="small" type="primary" @click="openPrint(doc)">
+                  打印 / 另存为 PDF
                 </el-button>
-                <el-button v-if="pdfVisible" size="small" @click="download(doc, 'pdf')">
-                  下载 PDF
+                <el-button v-if="hasLegacyDocx(doc)" size="small" @click="download(doc, 'docx')">
+                  下载历史 Word(旧版)
                 </el-button>
               </div>
-              <!-- 终版:验收确认(status=3)后归档,spec §6.2 -->
-              <template v-if="d.flow.flowType === 'acceptance' && d.flow.status === 3">
-                <div class="final-title">终版(验收确认后生成)</div>
-                <div class="deliver-row" v-for="doc in deliverDocs" :key="'f' + doc.type">
-                  <span class="doc-name">{{ doc.label }}</span>
-                  <el-button size="small" type="success" @click="download(doc, 'docx', true)">
-                    下载 Word
-                  </el-button>
-                  <el-button v-if="pdfVisible" size="small" type="success" plain
-                    @click="download(doc, 'pdf', true)">
-                    下载 PDF
-                  </el-button>
-                </div>
-              </template>
             </template>
-            <el-empty v-else description="提交后生成待签 Word/PDF" :image-size="70" />
+            <el-empty v-else description="提交后可打印待签件(浏览器打印 A4/另存 PDF)" :image-size="70" />
           </el-card>
 
           <!-- 扫描件区 -->
@@ -163,7 +151,9 @@
           <el-card shadow="never">
             <template #header>操作</template>
             <div class="op-row">
-              <el-button v-if="d.flow.status === 0" type="primary" @click="editEntry">继续编辑</el-button>
+              <el-button v-if="[0, 1, 2, 4].includes(d.flow.status)" type="primary" @click="editEntry">
+                {{ d.flow.status === 0 ? '继续编辑' : '修改填报' }}
+              </el-button>
               <el-button v-if="d.flow.status === 1" @click="doWithdraw('撤回后回到草稿,可修改后重新提交,确定撤回?')">
                 撤回(回草稿)
               </el-button>
@@ -187,8 +177,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  downloadAttachment, downloadDeliver, downloadDeliverFinal, flowDetail, listDepts, resubmit,
-  uploadScan, withdraw
+  downloadAttachment, downloadDeliver, flowDetail, listDepts, resubmit, uploadScan, withdraw
 } from '../../api/hx'
 
 const route = useRoute()
@@ -202,7 +191,8 @@ const scanning = ref(false)
 
 const ACTION_LABEL = {
   submit: '提交', withdraw: '撤回', upload_scan: '上传扫描件', resubmit: '重新提交',
-  approve: '审批通过', verify: '验收通过', reject: '退回', precheck_reject: '盖章前预检退回'
+  approve: '审批通过', verify: '验收通过', reject: '退回', precheck_reject: '盖章前预检退回',
+  admin_edit: '科技处修正'
 }
 
 /** 流程类型对应允许的扫描件类型(与后端 validateScanDocType 同口径) */
@@ -225,17 +215,11 @@ const activeStep = computed(() => {
   const s = d.value?.flow?.status ?? 0
   return s === 4 ? 2 : s
 })
-const pdfVisible = computed(() => d.value?.deliverPdfVisible === 'true')
 const records = computed(() => [...(d.value?.records || [])].reverse())
 const scans = computed(() => (d.value?.attachments || []).filter((a) => a.bizType === 'hx_scan'))
 /** 合同扫描件(hx_apply):项目级附件,登记向导上传,教师可查看/下载自己的合同扫描件 */
 const contracts = computed(() => (d.value?.attachments || []).filter((a) => a.bizType === 'hx_apply'))
 const scanDocTypes = computed(() => SCAN_DOC_ALLOW[d.value?.flow?.flowType] || [])
-const printTip = computed(() => ({
-  register: '本表一式四份(科技处、计财处、所在单位、项目负责人各一份),双面打印,控制在两页内',
-  change: '本表一式三份,双面打印,控制在两页内(分页打印需委托方盖骑缝章)',
-  acceptance: '验收登记表一式四份双面打印;验收报告多页单面打印,签名处须手写'
-}[d.value?.flow?.flowType] || ''))
 
 /** 交付文档:验收单两张,其余一张 */
 const deliverDocs = computed(() => {
@@ -246,6 +230,25 @@ const deliverDocs = computed(() => {
     ]
   }
   return [{ type: '', label: flowLabel.value }]
+})
+
+/** HTML即交付:打印=新标签只读页自动弹打印框(验收单 doc 参数区分两张) */
+function openPrint(doc) {
+  const q = doc.type ? `?doc=${doc.type}` : ''
+  window.open(`/print/${d.value.flow.flowType}/${flowId.value}${q}`, '_blank')
+}
+
+/** 旧单遗留的待签 docx(HTML转正前生成):存在才显示「下载历史 Word」 */
+function hasLegacyDocx(doc) {
+  const types = ['hx_docx', ...(doc.type === 'hx_report' ? ['hx_report_docx'] : [])]
+  return (d.value?.attachments || []).some((a) => types.includes(a.bizType))
+}
+
+/** 数据滞后判定:回扫后数据又被改(updateTime>scanTime,秒级精度)→提示重新打印盖章回扫 */
+const dataStale = computed(() => {
+  const f = d.value?.flow
+  return f && f.status === 2 && f.scanTime && f.updateTime
+    && String(f.updateTime) > String(f.scanTime)
 })
 
 const fmtMoney = (v) => (v === null || v === undefined ? '—' : Number(v).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
@@ -273,16 +276,14 @@ async function load() {
   }
 }
 
-/** 下载待签/终版件:经 axios 附 token,前端拼文件名(final=终版下载) */
-async function download(doc, kind, final = false) {
+/** 下载历史待签 Word(旧单遗留;终版归档件已随 HTML 即交付退役) */
+async function download(doc, kind) {
   try {
-    const blob = final
-      ? await downloadDeliverFinal(flowId.value, kind, doc.type || undefined)
-      : await downloadDeliver(flowId.value, kind, doc.type || undefined)
+    const blob = await downloadDeliver(flowId.value, kind, doc.type || undefined)
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `${d.value.project?.name || '横向项目'}_${doc.label}${final ? '_终版' : ''}.${kind}`
+    a.download = `${d.value.project?.name || '横向项目'}_${doc.label}.${kind}`
     a.click()
     URL.revokeObjectURL(url)
   } catch (e) {
@@ -365,12 +366,12 @@ async function doResubmit() {
   }
 }
 
-/** 草稿/退回单的编辑入口:跳对应表单页 */
+/** 审批前编辑入口(0/1/2/4):跳对应填单页 */
 function editEntry() {
   const t = d.value?.flow?.flowType
   if (t === 'register') router.push(`/hx/register/${flowId.value}`)
-  else if (t === 'change') router.push(`/hx/change?flowId=${flowId.value}`)
-  else if (t === 'acceptance') router.push(`/hx/acceptance?flowId=${flowId.value}`)
+  else if (t === 'change') router.push(`/hx/change/${flowId.value}`)
+  else if (t === 'acceptance') router.push(`/hx/acceptance/${flowId.value}`)
 }
 
 onMounted(load)

@@ -10,6 +10,7 @@ public class AcceptanceSaveDTO {
     private Long flowId;
     private Long projectId;
     private BigDecimal usedAmount;
+    private String finishDate;       // 项目完成时间 yyyy-MM-dd(教师填报)
     private Integer isOnTime;
     private String outcomeForm;      // 逗号分隔多选
     private String acceptSummary;

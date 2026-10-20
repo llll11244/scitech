@@ -21,6 +21,8 @@ public class RpBudget {
     private String subject;
     /** 金额(元) */
     private BigDecimal amount;
+    /** 合同约定不受限(1=不计入合计,打印显示口径文字,金额置0) */
+    private Integer unrestricted;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
     private String createBy;

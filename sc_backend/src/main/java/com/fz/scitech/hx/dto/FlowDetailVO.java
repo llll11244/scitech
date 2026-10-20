@@ -17,4 +17,6 @@ public class FlowDetailVO {
     private List<RpHxFlowRecord> records;
     private String deliverPdfVisible;       // sys_config 读数,前端显隐 PDF 入口
     private String newLeaderName;           // 变更单回显:变更后负责人姓名(按 new_leader_id 查 sys_user,N4 Task26)
+    /** 到账累计(元,验收单只读带出=金额校验 R4 基准;其余流程 null) */
+    private java.math.BigDecimal receivedTotal;
 }

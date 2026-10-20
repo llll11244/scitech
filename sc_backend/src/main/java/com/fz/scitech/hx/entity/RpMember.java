@@ -19,6 +19,8 @@ public class RpMember {
     private Long projectId;
     /** 字典member_type:教师/学生/校外人员 */
     private String memberType;
+    /** 工号(校内成员,登记表按工号从系统带出信息;校外/学生空) */
+    private String employeeNo;
     private String name;
     private String unit;
     /** 职称(字典;纵向阶段用) */

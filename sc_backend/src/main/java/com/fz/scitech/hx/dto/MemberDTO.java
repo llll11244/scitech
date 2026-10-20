@@ -7,6 +7,7 @@ import java.math.BigDecimal;
 @Data
 public class MemberDTO {
     private String memberType;   // 教师/学生/校外人员
+    private String employeeNo;   // 工号(校内成员,登记表按工号从系统带出;校外/学生空)
     private String name;
     private String unit;
     private String title;

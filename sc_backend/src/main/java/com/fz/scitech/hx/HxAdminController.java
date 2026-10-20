@@ -54,6 +54,18 @@ public class HxAdminController {
     }
 
     /**
+     * admin 修正教师填报数据(HTML转正 决策③):仅 status∈{1,2},任意表单字段;
+     * body=对应流程保存 DTO 同构 JSON(与教师保存接口同结构);留痕 admin_edit+通知教师。
+     */
+    @PostMapping("/{flowId}/admin-save")
+    public Result<Void> adminSave(@PathVariable Long flowId, @RequestBody Map<String, Object> body,
+                                  HttpServletRequest request) {
+        requireAdmin(request);
+        auditService.adminSave(uid(request), username(request), flowId, body);
+        return Result.ok(null);
+    }
+
+    /**
      * 退回:status 1/2 均可,意见必填;isPrecheck=true=盖章前预检退回(决策#18,
      * 留痕 action=precheck_reject;意见「盖章前预检」前缀由前端拼接传入)。
      */

@@ -7,7 +7,9 @@ import com.fz.scitech.hx.dto.AcceptanceSaveDTO;
 import com.fz.scitech.hx.dto.ChangeSaveDTO;
 import com.fz.scitech.hx.dto.FlowDetailVO;
 import com.fz.scitech.hx.dto.RegisterSaveDTO;
+import com.fz.scitech.system.entity.SysDept;
 import com.fz.scitech.system.entity.SysUser;
+import com.fz.scitech.system.mapper.SysDeptMapper;
 import com.fz.scitech.system.mapper.SysUserMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -37,11 +39,14 @@ public class HxController {
     private final HxService hxService;
     private final FundingService fundingService;
     private final SysUserMapper userMapper;
+    private final SysDeptMapper deptMapper;
 
-    public HxController(HxService hxService, FundingService fundingService, SysUserMapper userMapper) {
+    public HxController(HxService hxService, FundingService fundingService, SysUserMapper userMapper,
+                        SysDeptMapper deptMapper) {
         this.hxService = hxService;
         this.fundingService = fundingService;
         this.userMapper = userMapper;
+        this.deptMapper = deptMapper;
     }
 
     /**
@@ -73,6 +78,36 @@ public class HxController {
             rows.add(m);
         }
         return Result.ok(rows);
+    }
+
+    /**
+     * 工号查人(HTML表单转正 2026-10-21):登记表成员区输工号自动带出信息。
+     * username 精确匹配+启用账号,至多 1 条;回 {username,name,deptName,title}(专业系统无,教师手填);
+     * 查无返 data=null(前端整行手填并提示)。权限同 /hx/leaders(teacher/admin,viewer 拒)。
+     */
+    @GetMapping("/member-lookup")
+    public Result<Map<String, Object>> memberLookup(@RequestParam(required = false) String q,
+                                                    HttpServletRequest request) {
+        if ("viewer".equals(role(request))) {
+            throw new BizException("只读账号不支持工号查询");
+        }
+        if (q == null || q.isBlank()) {
+            return Result.ok(null);
+        }
+        SysUser u = userMapper.selectOne(new LambdaQueryWrapper<SysUser>()
+                .eq(SysUser::getUsername, q.trim())
+                .eq(SysUser::getStatus, 1)
+                .last("limit 1"));
+        if (u == null) {
+            return Result.ok(null);
+        }
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("username", u.getUsername());
+        m.put("name", u.getRealName());
+        SysDept d = u.getDeptId() == null ? null : deptMapper.selectById(u.getDeptId());
+        m.put("deptName", d == null ? null : d.getName());
+        m.put("title", u.getTitle());
+        return Result.ok(m);
     }
 
     /** 登记草稿保存(flowId 空=新建,非空=整体覆盖) */
@@ -166,20 +201,6 @@ public class HxController {
     @GetMapping("/{flowId}")
     public Result<FlowDetailVO> detail(@PathVariable Long flowId, HttpServletRequest request) {
         return Result.ok(hxService.flowDetail(uid(request), role(request), flowId));
-    }
-
-    /** 填报分屏预览:flowType+表单数据→docx 字节流(不入库不落盘,决策#36+直出Word);tplType=验收流程双模板切换 */
-    @PostMapping("/preview")
-    public void preview(@RequestBody Map<String, Object> body, HttpServletRequest request,
-                        HttpServletResponse response) throws IOException {
-        String flowType = (String) body.get("flowType");
-        String tplType = (String) body.get("tplType");
-        @SuppressWarnings("unchecked")
-        Map<String, Object> data = (Map<String, Object>) body.get("data");
-        byte[] docx = hxService.previewDocx(flowType, tplType, data, uid(request));
-        response.setContentType("application/vnd.openxmlformats-officedocument.wordprocessingml.document");
-        response.setContentLength(docx.length);
-        response.getOutputStream().write(docx);
     }
 
     /** 待签 Word 主交付下载(inline 预览同接口);doc=模板类型,验收流程有 hx_acceptance/hx_report 两张(默认 hx_acceptance) */

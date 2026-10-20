@@ -184,6 +184,7 @@ CREATE TABLE IF NOT EXISTS rp_hx_flow (
   is_on_time TINYINT COMMENT '是否按期完成0/1(验收单)',
   outcome_form VARCHAR(64) COMMENT '成果形式(字典hx_outcome_form,可多选逗号分隔)',
   used_amount DECIMAL(14,2) COMMENT '使用经费(元,验收单)',
+  finish_date DATE COMMENT '项目完成时间(验收单教师填报;区别rp_project.finish_date=审批结题日)',
   report_content MEDIUMTEXT COMMENT '附件4报告正文(纯文本分段\n\n分段;页数不限)',
   submit_time DATETIME COMMENT '提交时间',
   scan_time DATETIME COMMENT '回扫时间',
@@ -201,7 +202,7 @@ CREATE TABLE IF NOT EXISTS rp_hx_flow_record (
   id BIGINT NOT NULL AUTO_INCREMENT,
   project_id BIGINT NOT NULL COMMENT '→rp_project(冗余,按项目聚合全部流程单动作)',
   flow_id BIGINT NOT NULL COMMENT '→rp_hx_flow',
-  action VARCHAR(16) NOT NULL COMMENT 'submit提交/withdraw撤回/upload_scan回扫/precheck_reject预检退回/reject退回/resubmit重交/verify核定/approve通过',
+  action VARCHAR(16) NOT NULL COMMENT 'submit提交/withdraw撤回/upload_scan回扫/precheck_reject预检退回/reject退回/resubmit重交/verify核定/approve通过/admin_edit科技处修正(HTML转正)',
   operator_id BIGINT COMMENT '操作人→sys_user',
   operator_name VARCHAR(64) COMMENT '操作人姓名',
   opinion VARCHAR(500) COMMENT '退回意见/核定备注',
@@ -222,6 +223,7 @@ CREATE TABLE IF NOT EXISTS rp_member (
   id BIGINT NOT NULL AUTO_INCREMENT,
   project_id BIGINT NOT NULL COMMENT '→rp_project',
   member_type VARCHAR(16) COMMENT '字典hx_member_type:教师/学生/校外人员',
+  employee_no VARCHAR(32) COMMENT '工号(校内成员,登记表按工号从系统带出信息;校外/学生空)',
   name VARCHAR(64) COMMENT '姓名',
   unit VARCHAR(255) COMMENT '所在单位',
   title VARCHAR(32) COMMENT '职称(字典;纵向阶段用)',
@@ -246,6 +248,7 @@ CREATE TABLE IF NOT EXISTS rp_budget (
   project_id BIGINT NOT NULL COMMENT '→rp_project',
   subject VARCHAR(64) NOT NULL COMMENT '预算科目(横向=hx_budget_subject 6科目;纵向阶段加budget_subject 11科目)',
   amount DECIMAL(14,2) NOT NULL DEFAULT 0.00 COMMENT '金额(元;原生元口径,无迁移)',
+  unrestricted TINYINT NOT NULL DEFAULT 0 COMMENT '合同约定不受限(1=不计入合计,打印显示口径文字,金额置0)',
   create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
   update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   create_by VARCHAR(64) DEFAULT NULL,
@@ -290,3 +293,34 @@ CREATE TABLE IF NOT EXISTS rp_funding_record (
   PRIMARY KEY (id),
   KEY idx_project_date (project_id, received_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='到账明细表(累计实时SUM不冗余,单一事实源;admin录入教师只读)';
+
+-- ---------------------------------------------------------------
+-- HTML表单转正(2026-10-21):老库补 3 列(新库由上方 CREATE TABLE 直接建出;
+-- 幂等口径同上 sys_user.last_login:information_schema 判存+动态 SQL)
+-- rp_member.employee_no=校内在职成员工号(登记表B区工号列,按工号从系统带出信息)
+-- rp_budget.unrestricted=合同约定不受限(勾选科目不计入合计,打印出口径文字)
+-- rp_hx_flow.finish_date=验收单「完成时间」(教师填报;rp_project.finish_date=审批结题日,语义分离)
+-- ---------------------------------------------------------------
+SET @col = (SELECT IF(COUNT(*) = 0,
+  'ALTER TABLE rp_member ADD COLUMN employee_no VARCHAR(32) DEFAULT NULL COMMENT ''工号(校内成员,登记表按工号从系统带出信息;校外/学生空)'' AFTER member_type',
+  'SELECT 1') FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'rp_member' AND COLUMN_NAME = 'employee_no');
+PREPARE stmt FROM @col;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @col = (SELECT IF(COUNT(*) = 0,
+  'ALTER TABLE rp_budget ADD COLUMN unrestricted TINYINT NOT NULL DEFAULT 0 COMMENT ''合同约定不受限(1=不计入合计,打印显示口径文字,金额置0)'' AFTER amount',
+  'SELECT 1') FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'rp_budget' AND COLUMN_NAME = 'unrestricted');
+PREPARE stmt FROM @col;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @col = (SELECT IF(COUNT(*) = 0,
+  'ALTER TABLE rp_hx_flow ADD COLUMN finish_date DATE DEFAULT NULL COMMENT ''项目完成时间(验收单教师填报;区别rp_project.finish_date=审批结题日)'' AFTER used_amount',
+  'SELECT 1') FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'rp_hx_flow' AND COLUMN_NAME = 'finish_date');
+PREPARE stmt FROM @col;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;

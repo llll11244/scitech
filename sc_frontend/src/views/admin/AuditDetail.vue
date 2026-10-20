@@ -13,6 +13,10 @@
             <el-tag v-if="d.flow.status === 1" size="small" type="warning" effect="plain">可预检</el-tag>
           </div>
           <div>
+            <el-button v-if="d.flow.status === 1 || d.flow.status === 2" type="warning" plain
+              @click="editMode = !editMode">
+              {{ editMode ? '退出修正' : '修正填报' }}
+            </el-button>
             <el-button v-if="d.flow.status === 2" type="primary" @click="approveVisible = true">
               {{ d.flow.flowType === 'acceptance' ? '通过(录核定额)' : '通过' }}
             </el-button>
@@ -25,33 +29,42 @@
         </div>
       </el-card>
 
+      <!-- 数据滞后警示:回扫后数据又被改(教师/admin),盖章扫描件对应旧数据 -->
+      <el-alert v-if="dataStale" type="error" :closable="false" class="mb"
+        title="填报数据在回扫后被修改:当前盖章扫描件对应旧数据,请要求教师重新打印盖章回扫或认可差异后再通过。" />
+
       <el-row :gutter="14">
-        <!-- 左:待签 Word 预览(决策#36 直出 Word,DocxPane 渲染) -->
+        <!-- 左:单据(HTML即交付:只读/修正共用同一 Sheet;打印=新标签) -->
         <el-col :span="14">
           <el-card shadow="never" class="preview-card">
             <template #header>
               <div class="bar">
-                <el-radio-group v-if="deliverDocs.length > 1" v-model="curDoc" size="small" @change="loadPreview">
-                  <el-radio-button v-for="doc in deliverDocs" :key="doc.type" :value="doc.type">
+                <el-radio-group v-if="docs.length > 1" v-model="curDoc" size="small">
+                  <el-radio-button v-for="doc in docs" :key="doc.type" :value="doc.type">
                     {{ doc.label }}
                   </el-radio-button>
                 </el-radio-group>
-                <span v-else class="doc-title">{{ deliverDocs[0]?.label }}</span>
+                <span v-else class="doc-title">{{ docs[0]?.label }}</span>
                 <div class="dl">
-                  <el-button size="small" type="primary" @click="download('docx')">下载 Word</el-button>
-                  <el-button v-if="pdfVisible" size="small" @click="download('pdf')">下载 PDF</el-button>
-                  <!-- 终版:仅验收确认(status=3)后存在,spec §6.2 -->
-                  <template v-if="d.flow.flowType === 'acceptance' && d.flow.status === 3">
-                    <el-button size="small" type="success" @click="downloadFinal('docx')">终版 Word</el-button>
-                    <el-button v-if="pdfVisible" size="small" type="success" plain
-                      @click="downloadFinal('pdf')">终版 PDF</el-button>
-                  </template>
+                  <el-button v-if="editMode" size="small" type="warning" :loading="savingEdit"
+                    @click="doAdminSave">保存修正(留痕+通知教师)</el-button>
+                  <el-button size="small" type="primary" @click="openPrint">打印 / 另存为 PDF</el-button>
+                  <el-button v-if="hasLegacyDocx" size="small" @click="download('docx')">下载历史 Word</el-button>
                 </div>
               </div>
             </template>
-            <div class="preview-box">
-              <DocxPane :blob="previewBlob" />
-              <el-empty v-if="!previewBlob && !previewLoading" description="提交后可预览待签 Word" :image-size="70" />
+            <div class="preview-box" :class="{ editing: editMode }">
+              <template v-if="d.flow.flowType === 'register'">
+                <RegisterSheet :model="model" :mode="editMode ? 'edit' : 'print'" :meta="meta" />
+              </template>
+              <template v-else-if="d.flow.flowType === 'change'">
+                <ChangeSheet :model="model" :mode="editMode ? 'edit' : 'print'" :meta="meta" />
+              </template>
+              <template v-else>
+                <AcceptanceSheet v-if="curDoc !== 'hx_report'" :model="model"
+                  :mode="editMode ? 'edit' : 'print'" :meta="meta" />
+                <ReportSheet v-else :model="model" :mode="editMode ? 'edit' : 'print'" :meta="meta" />
+              </template>
             </div>
           </el-card>
         </el-col>
@@ -88,6 +101,7 @@
                 <el-descriptions-item label="变更原因">{{ d.flow.changeReason || '—' }}</el-descriptions-item>
               </template>
               <template v-if="d.flow.flowType === 'acceptance'">
+                <el-descriptions-item label="到账累计(元)">{{ fmtMoney(d.receivedTotal) }}</el-descriptions-item>
                 <el-descriptions-item label="使用经费(元)">{{ fmtMoney(d.flow.usedAmount) }}</el-descriptions-item>
                 <el-descriptions-item label="是否按期">{{ d.flow.isOnTime === 1 ? '按期' : '延期' }}</el-descriptions-item>
                 <el-descriptions-item label="成果形式">{{ d.flow.outcomeForm || '—' }}</el-descriptions-item>
@@ -123,7 +137,7 @@
             <el-empty v-if="!scans.length" description="暂无扫描件(教师盖章回扫后出现)" :image-size="60" />
           </el-card>
 
-          <!-- 合同扫描件(Task25 hx_apply,登记向导上传;后端已放行 admin 调阅) -->
+          <!-- 合同扫描件 -->
           <el-card shadow="never" class="mb">
             <template #header>合同扫描件</template>
             <div v-for="a in contracts" :key="a.id" class="scan-item">
@@ -133,7 +147,7 @@
               <el-button link type="primary" size="small" @click="viewAtt(a)">查看</el-button>
               <el-button link size="small" @click="downAtt(a)">下载</el-button>
             </div>
-            <el-empty v-if="!contracts.length" description="暂无合同扫描件(教师在登记向导上传)" :image-size="60" />
+            <el-empty v-if="!contracts.length" description="暂无合同扫描件(教师在登记页上传)" :image-size="60" />
           </el-card>
 
           <!-- 时间线 -->
@@ -161,7 +175,7 @@
             </el-form-item>
           </el-form>
           <el-alert type="info" :closable="false"
-            title="通过即结题:写入核定额、渲染终版两张(验收登记表+验收报告)并通知教师。" />
+            title="通过即结题:写入核定额并通知教师;终版=通过后打印只读页(带核定额/核定人)。" />
         </template>
         <el-alert v-else type="info" :closable="false"
           :title="`确认通过该${TYPE_TAG[d.flow.flowType]?.label || '单据'}?${APPROVE_TIP[d.flow.flowType] || ''}`" />
@@ -171,7 +185,7 @@
         </template>
       </el-dialog>
 
-      <!-- 退回弹窗:意见必填;预检勾选仅 status=1(盖章前预检,决策#18) -->
+      <!-- 退回弹窗:意见必填;预检勾选仅 status=1 -->
       <el-dialog v-model="rejectVisible" title="退回" width="520px">
         <el-form label-width="90px">
           <el-form-item label="退回意见" required>
@@ -192,18 +206,20 @@
 </template>
 
 <!--
-  科技处审批页(spec §7.2):左待签 Word 预览(deliver docx 流→DocxPane,决策#36),
-  右摘要/退回对照/扫描件/时间线;[通过](验收录核定额)/[退回](意见必填,status=1/2 均可,
-  预检勾选仅 status=1——后端不校验该语义,前端守);数据源=教师端同一 GET /hx/{flowId}(admin 直查)。
+  科技处审批页(HTML转正 2026-10-21):左=单据只读 Sheet(与打印页同口径),
+  「修正填报」(status 1/2)切 edit 模式,保存走 admin-save(留痕 admin_edit+通知教师,
+  与提交同强度金额/字数校验);打印=新标签只读页;数据滞后(回扫后被改)红条警示。
 -->
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import {
-  downloadAttachment, downloadDeliver, downloadDeliverFinal, flowDetail, rejectFlow, reviewFlow
-} from '../../api/hx'
-import DocxPane from '../hx/DocxPane.vue'
+import { adminSave, downloadAttachment, downloadDeliver, flowDetail, rejectFlow, reviewFlow } from '../../api/hx'
+import { buildSheetModel, collectSheetDto } from '../../composables/sheetModel'
+import AcceptanceSheet from '../../components/hxsheet/AcceptanceSheet.vue'
+import ChangeSheet from '../../components/hxsheet/ChangeSheet.vue'
+import RegisterSheet from '../../components/hxsheet/RegisterSheet.vue'
+import ReportSheet from '../../components/hxsheet/ReportSheet.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -211,10 +227,16 @@ const router = useRouter()
 const loading = ref(false)
 const d = ref(null)
 const curDoc = ref('hx_acceptance')
+const editMode = ref(false)
+const savingEdit = ref(false)
+
+const model = reactive({})
+const meta = reactive({ orig: {} })
 
 const ACTION_LABEL = {
   submit: '提交', withdraw: '撤回', upload_scan: '上传扫描件', resubmit: '重新提交',
-  approve: '审批通过', verify: '验收通过', reject: '退回', precheck_reject: '盖章前预检退回'
+  approve: '审批通过', verify: '验收通过', reject: '退回', precheck_reject: '盖章前预检退回',
+  admin_edit: '科技处修正'
 }
 const STATUS = {
   0: { label: '草稿', type: 'info' },
@@ -234,24 +256,32 @@ const APPROVE_TIP = {
 }
 
 const flowId = computed(() => Number(route.params.flowId))
-const pdfVisible = computed(() => d.value?.deliverPdfVisible === 'true')
 const records = computed(() => [...(d.value?.records || [])].reverse())
 const scans = computed(() => (d.value?.attachments || []).filter((a) => a.bizType === 'hx_scan'))
-/** 合同扫描件(hx_apply):项目级附件,教师登记向导上传,admin 可调阅(查看/下载同 hx_scan) */
 const contracts = computed(() => (d.value?.attachments || []).filter((a) => a.bizType === 'hx_apply'))
 
-/** 预览文档:验收单两张,其余一张 */
-const deliverDocs = computed(() => {
+/** 单据文档:验收单两张,其余一张 */
+const docs = computed(() => {
   if (d.value?.flow?.flowType === 'acceptance') {
     return [
       { type: 'hx_acceptance', label: '验收登记表' },
       { type: 'hx_report', label: '验收报告' }
     ]
   }
-  return [{ type: '', label: TYPE_TAG[d.value?.flow?.flowType]?.label || '待签件' }]
+  return [{ type: '', label: TYPE_TAG[d.value?.flow?.flowType]?.label || '单据' }]
 })
 
-/** 退回态变更单 before/after 对照(before_json 提交时快照 vs 当前申请值) */
+/** 旧单遗留 docx(HTML转正前生成) */
+const hasLegacyDocx = computed(() => (d.value?.attachments || [])
+  .some((a) => ['hx_docx', 'hx_report_docx'].includes(a.bizType)))
+
+/** 数据滞后:回扫后数据又被改(updateTime>scanTime,秒级精度) */
+const dataStale = computed(() => {
+  const f = d.value?.flow
+  return f && f.status === 2 && f.scanTime && f.updateTime && String(f.updateTime) > String(f.scanTime)
+})
+
+/** 退回态变更单 before/after 对照 */
 const diffRows = computed(() => {
   const f = d.value?.flow
   if (!f || f.flowType !== 'change' || f.status !== 4 || !f.beforeJson) return []
@@ -261,7 +291,6 @@ const diffRows = computed(() => {
   } catch {
     return []
   }
-  const hx = d.value.hx || {}
   const rows = []
   if (f.newAmount != null) {
     rows.push({ field: '合同经费(元)', before: before.contractAmount ?? '', after: f.newAmount })
@@ -281,44 +310,50 @@ const diffRows = computed(() => {
 const fmtMoney = (v) => (v === null || v === undefined ? '—' : Number(v).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
 const fmtTime = (t) => (t || '').replace('T', ' ').slice(0, 16)
 
-/* ---------- 加载+预览 ---------- */
-const previewBlob = ref(null)
-const previewLoading = ref(false)
-
 async function load() {
   loading.value = true
   try {
     d.value = await flowDetail(flowId.value)
-    curDoc.value = deliverDocs.value[0]?.type || ''
-    await loadPreview()
+    const built = await buildSheetModel(d.value, d.value.flow.flowType)
+    Object.keys(model).forEach((k) => delete model[k])
+    Object.assign(model, built.model)
+    Object.keys(meta).forEach((k) => delete meta[k])
+    Object.assign(meta, built.meta)
+    curDoc.value = docs.value[0]?.type || ''
+    if (![1, 2].includes(d.value.flow.status)) {
+      editMode.value = false
+    }
   } finally {
     loading.value = false
   }
 }
 
-async function loadPreview() {
-  if (d.value?.flow?.status === 0) return // 草稿无待签件
-  previewLoading.value = true
+/** admin 代改保存:与教师提交同强度校验由后端强制;留痕 admin_edit+通知教师 */
+async function doAdminSave() {
+  savingEdit.value = true
   try {
-    previewBlob.value = await downloadDeliver(flowId.value, 'docx', curDoc.value || undefined)
+    const dto = collectSheetDto(d.value.flow.flowType, model, flowId.value, d.value.flow.projectId)
+    await adminSave(flowId.value, dto)
+    ElMessage.success('已修正并通知教师')
+    editMode.value = false
+    await load()
   } catch (e) {
-    previewBlob.value = null
+    /* 拦截器已提示(金额/字数校验失败会在此报错) */
   } finally {
-    previewLoading.value = false
+    savingEdit.value = false
   }
+}
+
+function openPrint() {
+  const q = curDoc.value && d.value.flow.flowType === 'acceptance' ? `?doc=${curDoc.value}` : ''
+  window.open(`/print/${d.value.flow.flowType}/${flowId.value}${q}`, '_blank')
 }
 
 async function download(kind) {
   try {
-    const blob = await downloadDeliver(flowId.value, kind, curDoc.value || undefined)
+    const blob = await downloadDeliver(flowId.value, kind,
+      d.value.flow.flowType === 'acceptance' ? curDoc.value || undefined : undefined)
     saveBlob(blob, `${d.value.project?.name || '待签件'}.${kind}`)
-  } catch (e) { /* 拦截器已提示 */ }
-}
-
-async function downloadFinal(kind) {
-  try {
-    const blob = await downloadDeliverFinal(flowId.value, kind, curDoc.value || undefined)
-    saveBlob(blob, `${d.value.project?.name || '终版'}_终版.${kind}`)
   } catch (e) { /* 拦截器已提示 */ }
 }
 
@@ -383,7 +418,6 @@ async function doReject() {
   }
   acting.value = true
   try {
-    // 预检意见加前缀留痕(与 test_hx_audit 口径一致,后端按传入 opinion 落库)
     await rejectFlow(flowId.value, isPrecheck.value ? `盖章前预检:${opinion}` : opinion, isPrecheck.value)
     ElMessage.success('已退回,已通知教师')
     rejectVisible.value = false
@@ -448,10 +482,15 @@ export default { name: 'AuditDetail' }
 .preview-box {
   height: calc(100vh - 250px);
   overflow-y: auto;
-  background: #f5f7fa;
+  background: #fff;
   border: 1px solid #dcdfe6;
   border-radius: 4px;
   padding: 12px 8px;
+}
+
+.preview-box.editing {
+  background: #FDF6EC;
+  border-color: #e6a23c;
 }
 
 .scan-item {

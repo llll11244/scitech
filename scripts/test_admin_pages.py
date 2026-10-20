@@ -73,7 +73,7 @@ def reg_payload(name):
                "leaderEmail": "t@a.cn", "projectSummary": "摘要", "progressPlan": "进度"},
         "members": [{"memberType": "教师", "name": "教师甲", "unit": "智能制造与装备学院",
                      "title": "教授", "major": "机械工程", "duty": "总体设计", "sortNo": 1}],
-        "budgets": [{"subject": "业务费", "amount": "50000.00"}],
+        "budgets": [{"subject": "业务费", "amount": "200000.00"}],
     }
 
 
@@ -91,8 +91,12 @@ def main():
     t2 = login("teacher2", "teacher2123")
     admin = login("admin", "admin123")
 
-    # ================ ① 终版下载(结题项目) ================
+    # ================ ① 验收结题+终版口径(HTML即交付:无 docx 归档件) ================
     fid_reg, pid = register_confirmed(t, admin, "Task26终版测试项目")
+    # 验收核算前置(R6):录到账 80000,成员配平(100%/80000)使用 80000
+    assert post("/hx/funding", admin, {"projectId": pid, "amount": "80000.00",
+                                       "receivedDate": "2027-11-01", "payer": "Task26测试委托单位"}
+                ).get("code") == 0, "到账录入失败"
     acc = {"projectId": pid, "usedAmount": "80000.00", "isOnTime": 1,
            "outcomeForm": "技术报告", "acceptSummary": "全部委托内容已完成并验收",
            "reportContent": "一、项目目标达成情况\n\n按合同完成全部内容。",
@@ -105,14 +109,9 @@ def main():
     assert post("/hx/%d/review" % fid_acc, admin, {"verifiedAmount": 80000.00}).get("code") == 0, "验收审批失败"
     assert post("/hx/%d/review" % fid_acc, admin, {}).get("code") != 0, "重复通过未拒"
 
+    # HTML转正(决策①):终版 docx 归档件退役——结题单也无件可下,终版=通过后打印只读页
     code, body = raw("GET", "/hx/%d/deliver-final/docx" % fid_acc, t)
-    check("终版验收表 docx(教师本人)", code in (0, 200) and body[:2] == b"PK", "code=%s len=%d" % (code, len(body)))
-    code, body = raw("GET", "/hx/%d/deliver-final/pdf?doc=hx_report" % fid_acc, t)
-    check("终版报告 pdf(doc=hx_report)", code in (0, 200) and body[:4] == b"%PDF", "code=%s len=%d" % (code, len(body)))
-    code, body = raw("GET", "/hx/%d/deliver-final/docx" % fid_acc, admin)
-    check("终版下载 admin 可取", code in (0, 200) and body[:2] == b"PK", "code=%s" % code)
-    code, body = raw("GET", "/hx/%d/deliver-final/docx" % fid_acc, t2)
-    check("终版下载非本人拒", code != 0, "code=%s" % code)
+    check("终版下载已退役(结题单无归档件)", code != 0, "code=%s" % code)
     code, body = raw("GET", "/hx/%d/deliver-final/docx" % fid_reg, t)
     check("登记单无终版拒(未验收确认)", code != 0, "code=%s" % code)
     # 未通过的单(造一张在途变更)也无终版

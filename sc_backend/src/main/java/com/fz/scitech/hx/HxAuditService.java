@@ -2,17 +2,17 @@ package com.fz.scitech.hx;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fz.scitech.common.BizException;
+import com.fz.scitech.hx.dto.AcceptanceSaveDTO;
+import com.fz.scitech.hx.dto.ChangeSaveDTO;
+import com.fz.scitech.hx.dto.RegisterSaveDTO;
 import com.fz.scitech.hx.entity.RpHxFlow;
 import com.fz.scitech.hx.entity.RpHxProject;
-import com.fz.scitech.hx.entity.RpMember;
 import com.fz.scitech.hx.entity.RpProject;
 import com.fz.scitech.hx.mapper.RpHxFlowMapper;
 import com.fz.scitech.hx.mapper.RpHxProjectMapper;
-import com.fz.scitech.hx.mapper.RpMemberMapper;
 import com.fz.scitech.hx.mapper.RpProjectMapper;
-import com.fz.scitech.platform.template.PdfRenderService;
-import com.fz.scitech.platform.template.dto.RenderContext;
 import com.fz.scitech.system.entity.SysDept;
 import com.fz.scitech.system.entity.SysNotify;
 import com.fz.scitech.system.entity.SysUser;
@@ -49,36 +49,29 @@ import java.util.stream.Collectors;
 @Service
 public class HxAuditService {
 
-    /** 终版完成时间格式(与样例口径一致,如 2027年12月20日) */
-    private static final DateTimeFormatter CN_DATE = DateTimeFormatter.ofPattern("yyyy年M月d日");
-
     private final RpProjectMapper projectMapper;
     private final RpHxProjectMapper hxMapper;
     private final RpHxFlowMapper flowMapper;
-    private final RpMemberMapper memberMapper;
     private final SysUserMapper userMapper;
     private final SysDeptMapper deptMapper;
     private final SysNotifyMapper notifyMapper;
-    private final RenderModelBuilder modelBuilder;
-    private final PdfRenderService pdfRenderService;
     private final HxService hxService;
     private final MgmtFeePolicy mgmtFeePolicy;
+    private final ObjectMapper objectMapper;
 
     public HxAuditService(RpProjectMapper projectMapper, RpHxProjectMapper hxMapper, RpHxFlowMapper flowMapper,
-                          RpMemberMapper memberMapper, SysUserMapper userMapper, SysDeptMapper deptMapper,
-                          SysNotifyMapper notifyMapper, RenderModelBuilder modelBuilder,
-                          PdfRenderService pdfRenderService, HxService hxService, MgmtFeePolicy mgmtFeePolicy) {
+                          SysUserMapper userMapper, SysDeptMapper deptMapper,
+                          SysNotifyMapper notifyMapper, HxService hxService, MgmtFeePolicy mgmtFeePolicy,
+                          ObjectMapper objectMapper) {
         this.projectMapper = projectMapper;
         this.hxMapper = hxMapper;
         this.flowMapper = flowMapper;
-        this.memberMapper = memberMapper;
         this.userMapper = userMapper;
         this.deptMapper = deptMapper;
         this.notifyMapper = notifyMapper;
-        this.modelBuilder = modelBuilder;
-        this.pdfRenderService = pdfRenderService;
         this.hxService = hxService;
         this.mgmtFeePolicy = mgmtFeePolicy;
+        this.objectMapper = objectMapper;
     }
 
     // ---------- 审批列表 ----------
@@ -228,36 +221,57 @@ public class HxAuditService {
         hxMapper.update(null, new LambdaUpdateWrapper<RpHxProject>()
                 .eq(RpHxProject::getProjectId, pid)
                 .set(RpHxProject::getVerifiedAmount, verifiedAmount));
-        renderFinalDeliverables(flow, adminId, adminName, verifiedAmount, today);
+        // HTML转正(决策①):不再渲终版 docx 归档件;通过后教师/ admin 打印只读页(带后台项)即终版
         notifyTeacher(p.getApplyUserId(), "横向项目验收通过",
                 "您的项目《" + p.getName() + "》已通过验收确认,核定到账金额:" + verifiedAmount
-                        + " 元,项目已结题,终版文件已归档。", pid, adminName);
+                        + " 元,项目已结题。", pid, adminName);
         hxService.saveRecord(flow, HxFlowStatus.ACT_VERIFY, adminName, adminId,
                 "核定到账金额:" + verifiedAmount + " 元");
     }
 
+    // ---------- admin 代改(HTML转正 决策③) ----------
     /**
-     * 终版两张渲染(仿 HxService.renderDeliverables 结构,finalVersion=true,不动该方法):
-     * hx_acceptance+hx_report,stem 分 tplType→hx_final_docx/hx_final_pdf 与
-     * hx_final_report_docx/hx_final_report_pdf(N3 终审注意②);
-     * 终版补渲染 buildAcceptance 留空的完成时间/核定到账(万元)。
+     * admin 修正教师填报数据(任意字段):仅 status∈{1,2}(4=教师重交域,3=锁定);
+     * 与提交同强度校验(必填/字数/金额核算);留痕 admin_edit+通知教师(提示扫描件可能滞后)。
+     * body=对应流程的保存 DTO 原始 JSON(与教师保存接口同结构)。
      */
-    private void renderFinalDeliverables(RpHxFlow flow, Long uid, String username,
-                                         BigDecimal verifiedAmount, LocalDate finishDate) {
-        RpProject p = projectMapper.selectById(flow.getProjectId());
-        hxService.fillTransient(p);
-        RpHxProject hx = hxService.requireHx(flow.getProjectId());
-        List<RpMember> members = memberMapper.selectList(new LambdaQueryWrapper<RpMember>()
-                .eq(RpMember::getProjectId, flow.getProjectId()).orderByAsc(RpMember::getSortNo));
-        Map<String, Object> acc = modelBuilder.buildAcceptance(p, hx, flow, members,
-                hxService.receivedTotal(flow.getProjectId()));
-        acc.put("finishDate", CN_DATE.format(finishDate));                       // 终版补:完成时间=确认日
-        acc.put("verifiedAmountWan", RenderModelBuilder.wan(verifiedAmount));    // 终版补:核定到账(万元)
-        pdfRenderService.render(new RenderContext(flow.getId(), flow.getProjectId(),
-                flow.getFlowType(), "hx_acceptance", uid, username, true), acc);
-        pdfRenderService.render(new RenderContext(flow.getId(), flow.getProjectId(),
-                flow.getFlowType(), "hx_report", uid, username, true),
-                modelBuilder.buildReport(p, hx, flow));
+    @Transactional
+    public void adminSave(Long adminId, String adminName, Long flowId, Map<String, Object> body) {
+        RpHxFlow flow = requireFlow(flowId);
+        int st = flow.getStatus();
+        if (st != HxFlowStatus.SUBMITTED && st != HxFlowStatus.SCANNED) {
+            throw new BizException("仅已提交/已回扫单可修正(退回单请教师修改后重交)");
+        }
+        String msg = "仅已提交/已回扫单可修正";
+        switch (flow.getFlowType()) {
+            case "register" -> {
+                RegisterSaveDTO dto = objectMapper.convertValue(body, RegisterSaveDTO.class);
+                hxService.validateRegister(dto);
+                hxService.applyRegisterEdit(flow, dto, adminName, msg);
+                hxService.validateRegisterBudgets(flow.getProjectId(), dto.getHx().getContractAmount());
+            }
+            case "change" -> {
+                ChangeSaveDTO dto = objectMapper.convertValue(body, ChangeSaveDTO.class);
+                hxService.validateChange(dto.getChangeType(), dto.getNewAmount(),
+                        HxService.parseDate(dto.getNewEndDate()), dto.getNewLeaderId());
+                hxService.validateChangeTexts(dto);
+                hxService.applyChangeEdit(flow, dto, msg);
+            }
+            case "acceptance" -> {
+                AcceptanceSaveDTO dto = objectMapper.convertValue(body, AcceptanceSaveDTO.class);
+                hxService.validateAcceptanceTexts(dto);
+                hxService.applyAcceptanceEdit(flow, dto, adminName, msg);
+                hxService.validateAcceptanceRequired(flow);
+                hxService.validateAcceptanceAmounts(flow.getProjectId(), flow);
+            }
+            default -> throw new BizException("未知流程类型:" + flow.getFlowType());
+        }
+        RpProject p = requireProject(flow.getProjectId());
+        notifyTeacher(p.getApplyUserId(), "科技处已修正您的" + flowLabel(flow.getFlowType()) + "单",
+                "您的" + flowLabel(flow.getFlowType()) + "单(项目《" + p.getName()
+                        + "》)填报数据已被科技处修正,请查看最新内容;若已盖章回扫,原扫描件对应旧数据,"
+                        + "请重新打印盖章回扫。", p.getId(), adminName);
+        hxService.saveRecord(flow, HxFlowStatus.ACT_ADMIN_EDIT, adminName, adminId, null);
     }
 
     // ---------- 退回(spec §3.2/决策#18) ----------

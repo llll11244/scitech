@@ -49,11 +49,11 @@ export async function listDepts() {
 export const getConfig = (key) => request.get(`/config/${key}`)
 /** 修改值型配置(admin,仅白名单键:hx_mgmt_fee_rate 管理费比例%) */
 export const putConfig = (key, value) => request.put(`/config/${key}`, { value })
+/** 工号查人(登记表成员区自动带出):精确匹配启用账号 → {username,name,deptName,title} 或 null */
+export const lookupMember = (username) =>
+  request.get('/hx/member-lookup', { params: { q: username } })
 
-/* ---------- blob 型:分屏预览与交付下载 ---------- */
-/** 表单数据直出 docx 预览流(blob);tplType=验收流程双模板切换(hx_acceptance/hx_report) */
-export const previewDocx = (flowType, data, tplType) =>
-  request.post('/hx/preview', { flowType, data, tplType }, { responseType: 'blob', timeout: 60000 })
+/* ---------- blob 型:交付下载(HTML转正:待签件=浏览器打印 /print/*,预览接口已退役) ---------- */
 
 /**
  * 待签交付下载(blob,经 axios 附 token;直链 a.href 不带 Authorization 不可用)。
@@ -83,6 +83,8 @@ export const rejectFlow = (flowId, opinion, isPrecheck = false) =>
   request.post(`/hx/${flowId}/reject`, { opinion, isPrecheck })
 /** 教师退回单修改重交(4→1,旧待签+扫描件作废) */
 export const resubmit = (flowId) => request.post(`/hx/${flowId}/resubmit`)
+/** admin 修正教师填报(HTML转正:status∈{1,2} 任意字段;body=对应流程保存 DTO 同构) */
+export const adminSave = (flowId, body) => request.post(`/hx/${flowId}/admin-save`, body)
 
 /* ---------- 项目管理+到账(admin,spec §6.3/§4.8) ---------- */
 /** 全部横向项目聚合(九列+到账累计+执行状态+在途流程单) */

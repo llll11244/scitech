@@ -8,4 +8,5 @@ import java.math.BigDecimal;
 public class BudgetDTO {
     private String subject;
     private BigDecimal amount;
+    private Integer unrestricted;  // 1=合同约定不受限(不计入合计,打印出口径文字,金额置0)
 }

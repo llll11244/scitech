@@ -1,0 +1,102 @@
+/* ============================================================
+   横向四表「单据组件」共用 A4 版式(2026-10-21 HTML转正)
+   蓝本:templates-src/html/ 四页演示稿批次1-10 定稿口径——
+   @page A4 10mm/8mm;水印 fixed z-index:-1 opacity .30;信笺 Logo;
+   蓝阶主题;sign-block 26mm 流内 flex;tr 不跨页;打印隐藏 .btoolbar/.hint/.scr。
+   编辑态控件(.cellinput/.cellarea)无边框透明融入单元格,打印即纯文本。
+   ============================================================ */
+
+html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+/* ===== 单据页容器(编辑页与打印页共用) ===== */
+.hx-sheet { background: #fff; font-family: 'Microsoft YaHei', '微软雅黑', 'SimSun', '宋体', sans-serif;
+  font-size: 14px; color: #000; }
+.hx-sheet .page { max-width: 1000px; margin: 0 auto; padding: 52px 6px 0; }
+
+/* ===== 居中镂空水印(屏显常驻;打印/导出PDF 每页重复) ===== */
+.hx-sheet .watermark { position: fixed; left: 0; top: 0; right: 0; bottom: 0; display: flex;
+  align-items: center; justify-content: center; pointer-events: none; z-index: -1; opacity: .30; }
+.hx-sheet .watermark img { width: min(135mm, 78vw); }
+
+/* ===== 标题区(信笺式:Logo 左上,标题居中) ===== */
+.hx-sheet .toparea { position: relative; display: flex; align-items: center; justify-content: center;
+  min-height: 72px; padding: 4px 0 12px; }
+.hx-sheet .toparea b { font-size: 20px; font-weight: bold; }
+.hx-sheet .hlogo { position: absolute; left: 2px; top: 50%; transform: translateY(-50%); height: 68px; }
+
+/* ===== 表单表格 ===== */
+.hx-sheet table.ftab { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 4px; }
+.hx-sheet table.ftab td { border: 1px solid #a6a6a6; padding: 6px 8px; font-size: 14px;
+  vertical-align: middle; overflow-wrap: break-word; line-height: 1.7; }
+.hx-sheet td.lbl { background: #E9F6FD; }
+.hx-sheet td.chk { letter-spacing: 1px; }
+.hx-sheet .subhdr td { text-align: center; background: #C9E9F9; }
+.hx-sheet .grp td { background: #DDF2FC; text-align: center; letter-spacing: 6px; color: #000; }
+.hx-sheet .para { text-align: justify; }
+.hx-sheet .sign-block { min-height: 26mm; position: relative; }
+.hx-sheet .sign-line { display: flex; flex-direction: column; justify-content: flex-end;
+  align-items: flex-end; height: 26mm; text-align: right; line-height: 2.0; }
+.hx-sheet .inline-sign { text-align: right; line-height: 2.0; margin-top: 10px; }
+.hx-sheet .footnote { font-size: 12px; color: #000; margin: 8px 2px 26px; line-height: 1.7; }
+
+/* ===== 分组竖排标签 ===== */
+.hx-sheet td.vlbl { writing-mode: vertical-rl; text-orientation: upright; letter-spacing: 4px; padding: 6px 2px; }
+
+/* ===== 勾选组选项(可点击切换 √/□;multi 组可多选) ===== */
+.hx-sheet .opt { cursor: pointer; user-select: none; white-space: nowrap; }
+.hx-sheet .opt:hover { color: #14719F; }
+.hx-sheet .opt.on { color: #000; }
+
+/* ===== 屏显交互控件(打印/导出PDF 隐藏) ===== */
+.hx-sheet .scr { color: #666; font-size: 12px; }
+.hx-sheet .scr input { vertical-align: -1px; }
+.hx-sheet .cbx { margin-left: 14px; cursor: pointer; white-space: nowrap; }
+.hx-sheet .bcell .amt { border: none; border-bottom: 1px dashed #bbb; background: transparent;
+  font: inherit; color: inherit; width: 130px; padding: 0 2px; }
+
+/* ===== 编辑态:控件融入单元格(无边框透明,打印即纯文本) ===== */
+.hx-sheet .cellinput, .hx-sheet textarea.cellarea { border: none; background: transparent;
+  font: inherit; color: inherit; width: 100%; padding: 0; outline: none; line-height: 1.7; }
+.hx-sheet textarea.cellarea { resize: none; overflow: hidden; display: block; text-align: justify; }
+.hx-sheet .cellinput:focus, .hx-sheet textarea.cellarea:focus { background: #F0FAFE; }
+.hx-sheet .cellinput::placeholder, .hx-sheet textarea.cellarea::placeholder { color: #bbb; }
+.hx-sheet select.cellinput { appearance: none; -webkit-appearance: none; cursor: pointer; }
+.hx-sheet .cellwrap { position: relative; }
+.hx-sheet .charcount { position: absolute; right: 2px; bottom: -2px; }
+.hx-sheet .rowbtn { margin: 0 2px; cursor: pointer; }
+.hx-sheet .num { font-variant-numeric: tabular-nums; }
+
+/* ===== 工具条(屏显悬浮;PrintPage 内为静态流内) ===== */
+.hx-sheet .btoolbar { position: fixed; top: 10px; right: 12px; z-index: 100; text-align: right;
+  padding: 6px 12px; font-size: 13px; background: rgba(255, 255, 255, .92);
+  border: 1px solid #C9E9F9; border-radius: 16px; box-shadow: 0 1px 6px rgba(23, 145, 204, .18); }
+.hx-sheet .btoolbar a, .hx-sheet .btoolbar .tbtn { color: #1791CC; margin-left: 16px; cursor: pointer; }
+.hx-sheet .btoolbar .tip { color: #888; margin-left: 10px; }
+.hx-sheet .btoolbar .hintswitch { color: #666; cursor: pointer; }
+.hx-sheet .btoolbar .hintswitch input { vertical-align: -1px; margin-right: 3px; }
+
+/* ===== 填写提示层(仅屏显;打印/导出PDF 一律隐藏) ===== */
+.hx-sheet .hint { color: #8a8a8a; font-size: 12px; line-height: 1.65; }
+.hx-sheet .hint b { color: #777; font-weight: bold; }
+.hx-sheet details.hint { margin-top: 4px; }
+.hx-sheet details.hint summary { cursor: pointer; color: #1791CC; }
+.hx-sheet details.hint[open] summary { margin-bottom: 2px; }
+.hx-sheet .hint ul { margin: 2px 0 4px; padding-left: 18px; }
+.hx-sheet .hint li { margin: 1px 0; }
+.hx-sheet.nohints .hint, body.nohints .hx-sheet .hint { display: none; }
+
+/* ===== 报告正文区(附件4:页数不限) ===== */
+.hx-sheet .report-body { border: 1px solid #a6a6a6; border-top: none; padding: 6px 10px 14px; }
+.hx-sheet .report-body p.sub { font-weight: bold; margin: 8px 0 2px; }
+.hx-sheet .report-body p { text-indent: 2em; text-align: justify; line-height: 1.9; margin: 2px 0; }
+
+/* ===== 打印 ===== */
+@page { size: A4; margin: 10mm 8mm; }
+@media print {
+  .btoolbar, .hint, .scr { display: none !important; }
+  .page { max-width: none; padding: 0; }
+  body { margin: 0; background: #fff; }
+  tr { page-break-inside: avoid; }
+  .watermark { opacity: .30; }
+  .watermark img { width: 150mm; }
+}

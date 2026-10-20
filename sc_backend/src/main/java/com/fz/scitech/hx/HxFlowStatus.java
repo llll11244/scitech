@@ -19,4 +19,6 @@ public final class HxFlowStatus {
     public static final String ACT_VERIFY = "verify";
     public static final String ACT_REJECT = "reject";
     public static final String ACT_PRECHECK_REJECT = "precheck_reject";
+    /** HTML转正(2026-10-21 决策③):admin 审批前代改教师填报数据 */
+    public static final String ACT_ADMIN_EDIT = "admin_edit";
 }

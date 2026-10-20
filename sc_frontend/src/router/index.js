@@ -7,6 +7,13 @@ const routes = [
     component: () => import('../views/Login.vue'),
     meta: { title: '登录' }
   },
+  /* 打印页(HTML即交付):Layout 外新标签,只读 Sheet 自动弹打印;教师本人/admin 可访问 */
+  {
+    path: '/print/:flowType/:flowId',
+    name: 'PrintPage',
+    component: () => import('../views/PrintPage.vue'),
+    meta: { title: '打印', roles: ['teacher', 'admin'] }
+  },
   {
     path: '/',
     component: () => import('../views/Layout.vue'),
@@ -33,25 +40,35 @@ const routes = [
       },
       {
         path: 'hx/register',
-        name: 'RegisterWizard',
-        component: () => import('../views/hx/RegisterWizard.vue'),
+        name: 'RegisterPage',
+        component: () => import('../views/hx/RegisterPage.vue'),
         meta: { title: '项目登记', roles: ['teacher', 'admin'] }
       },
       {
         path: 'hx/register/:flowId',
-        component: () => import('../views/hx/RegisterWizard.vue'),
+        component: () => import('../views/hx/RegisterPage.vue'),
         meta: { title: '项目登记', roles: ['teacher', 'admin'] }
       },
       {
         path: 'hx/change',
-        name: 'ChangeForm',
-        component: () => import('../views/hx/ChangeForm.vue'),
+        name: 'ChangePage',
+        component: () => import('../views/hx/ChangePage.vue'),
+        meta: { title: '项目变更', roles: ['teacher', 'admin'] }
+      },
+      {
+        path: 'hx/change/:flowId',
+        component: () => import('../views/hx/ChangePage.vue'),
         meta: { title: '项目变更', roles: ['teacher', 'admin'] }
       },
       {
         path: 'hx/acceptance',
-        name: 'AcceptanceForm',
-        component: () => import('../views/hx/AcceptanceForm.vue'),
+        name: 'AcceptancePage',
+        component: () => import('../views/hx/AcceptancePage.vue'),
+        meta: { title: '项目验收', roles: ['teacher', 'admin'] }
+      },
+      {
+        path: 'hx/acceptance/:flowId',
+        component: () => import('../views/hx/AcceptancePage.vue'),
         meta: { title: '项目验收', roles: ['teacher', 'admin'] }
       },
       {

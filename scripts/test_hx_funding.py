@@ -85,16 +85,16 @@ def attach(headers, fid, doc_type="合同", name="contract.pdf", content=None):
 
 
 def reg_payload(name):
-    """登记载荷(deptId=9=种子院部,Task23 seed_dept_dev.sql)"""
+    """登记载荷(deptId=9=种子院部,Task23 seed_dept_dev.sql;预算=合同经费,规则R1)"""
     return {
         "name": name, "leaderName": "教师甲", "deptId": 9,
         "hx": {"projectType": "技术开发", "clientName": "到账测试委托单位", "clientNature": "企业",
                "contractAmount": "300000.00", "startDate": "2026-01-01", "endDate": "2027-12-31",
-               "useSchoolAsset": 0, "chargeMgmtFee": 1, "mgmtFeeAmount": "5000.00",
+               "useSchoolAsset": 0, "chargeMgmtFee": 1,
                "leaderEmail": "t@a.cn", "projectSummary": "摘要", "progressPlan": "进度"},
         "members": [{"memberType": "教师", "name": "教师甲", "unit": "智能制造与装备学院",
                      "title": "教授", "major": "机械工程", "duty": "总体设计", "sortNo": 1}],
-        "budgets": [{"subject": "业务费", "amount": "60000.00"}],
+        "budgets": [{"subject": "业务费", "amount": "300000.00"}],
     }
 
 
@@ -123,6 +123,10 @@ def main():
     # ---- 造数:F=已确认在研(到账主战场) H=验收走完=结题(解耦补录) G=登记草稿(attach 状态下限) ----
     fid_f, pid_f = register_confirmed(t, admin, "到账测试-在研项目甲")
     fid_h, pid_h = register_confirmed(t, admin, "到账测试-结题补录项目乙")
+    # HTML转正 R6:验收核算前置——先录到账 100000,成员配平(100%/100000)使用 100000
+    assert post("/hx/funding", admin, {"projectId": pid_h, "amount": "100000.00",
+                                       "receivedDate": "2027-10-01", "payer": "到账测试委托单位"}
+                ).get("code") == 0, "乙 验收前置到账失败"
     acc = {"projectId": pid_h, "usedAmount": "100000.00", "isOnTime": 1,
            "outcomeForm": "技术报告", "acceptSummary": "全部委托内容已完成并验收",
            "reportContent": "一、项目目标达成情况\n\n按合同完成全部内容。",
@@ -180,7 +184,8 @@ def main():
     # ---------------- ④ 结题后补录(与项目状态解耦,spec §4.8) ----------------
     r = post("/hx/funding", admin, {"projectId": pid_h, "amount": "10000.00", "receivedDate": today})
     d = (get("/hx/%d/funding" % pid_h, t).get("data") or {})
-    check("结题后仍可补录", r.get("code") == 0 and dec(d.get("total")) == Decimal("10000.00"),
+    check("结题后仍可补录", r.get("code") == 0
+          and dec(d.get("total")) == Decimal("110000.00"),   # 验收前置 100000+补录 10000
           str(r.get("msg")))
 
     # ---------------- ⑤ 合同附件(任何状态可传不迁移) ----------------
@@ -216,7 +221,7 @@ def main():
           and frow.get("hxRegisterDate") == today and frow.get("pendingFlows") == [],
           str(frow)[:160] if frow else "无 F 行")
     check("项目列表(已结题+到账累计)", hrow is not None and hrow.get("execStatus") == "已结题"
-          and dec(hrow.get("receivedTotal")) == Decimal("10000.00") and hrow.get("finishDate"),
+          and dec(hrow.get("receivedTotal")) == Decimal("110000.00") and hrow.get("finishDate"),
           str(hrow)[:140] if hrow else "无 H 行")
     # 发起在途变更单→执行状态推导为「变更中」+在途概要;顺带校验 id 倒序(H 新于 F)
     chg = {"projectId": pid_f, "changeType": "项目经费", "changeContent": "经费调增",

@@ -42,6 +42,8 @@ public class RpHxFlow {
     private String outcomeForm;
     /** 使用经费(元,验收单) */
     private BigDecimal usedAmount;
+    /** 项目完成时间(验收单教师填报;区别rp_project.finish_date=审批结题日) */
+    private LocalDate finishDate;
     /** 附件4报告正文(纯文本,\n\n 分段) */
     private String reportContent;
     private LocalDateTime submitTime;

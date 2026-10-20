@@ -95,11 +95,12 @@ def main():
         "name": "审批测试-智能纺织装备升级改造", "leaderName": "教师甲", "deptId": 9,
         "hx": {"projectType": "技术开发", "clientName": "审批测试委托单位", "clientNature": "企业",
                "contractAmount": "355000.00", "startDate": "2026-01-01", "endDate": "2027-12-31",
-               "useSchoolAsset": 0, "chargeMgmtFee": 1, "mgmtFeeAmount": "10000.00",
+               "useSchoolAsset": 0, "chargeMgmtFee": 1,
                "leaderEmail": "t@a.cn", "projectSummary": "摘要", "progressPlan": "进度"},
-        "members": [{"memberType": "教师", "name": "教师甲", "unit": "智能制造与装备学院",
+        "members": [{"memberType": "教师", "employeeNo": "20190001", "name": "教师甲",
+                      "unit": "智能制造与装备学院",
                       "title": "教授", "major": "机械工程", "duty": "总体设计", "sortNo": 1}],
-        "budgets": [{"subject": "业务费", "amount": "80000.00"}],
+        "budgets": [{"subject": "业务费", "amount": "355000.00"}],
     }
     fid_a = post("/hx/register/draft", t, reg_a)["data"]
     assert post("/hx/register/submit", t, {"flowId": fid_a}).get("code") == 0, "A 登记提交失败"
@@ -170,15 +171,46 @@ def main():
           and notify_has(t2, pid_a, "变更"),
           "audit=%s status=%s" % (d["project"]["auditStatus"], d["project"]["status"]))
 
-    # 4. 验收(项目已易主 teacher2):verifiedAmount 必填→结题+终版两张
-    acc = {"projectId": pid_a, "usedAmount": "410000.00", "isOnTime": 1,
+    # 4. 验收(项目已易主 teacher2):金额核算 R3-R6 负例 → 录到账 → 配平提交 → 核定结题
+    acc = {"projectId": pid_a, "usedAmount": "410000.00", "finishDate": "2027-12-20", "isOnTime": 1,
            "outcomeForm": "技术报告,专利", "acceptSummary": "全部委托内容已完成并验收",
            "reportContent": "一、项目目标达成情况\n\n按合同完成全部改造内容并上线运行。\n\n二、经费使用情况\n\n使用经费41万元。",
            "members": [{"memberType": "教师", "name": "教师乙", "unit": "智能制造与装备学院",
                         "title": "讲师", "major": "自动化", "duty": "系统联调",
-                        "ratio": "100.00", "amount": "410000.00", "sortNo": 1}]}
+                        "ratio": "100.00", "amount": "420000.00", "sortNo": 1}]}
     afid = post("/hx/acceptance/draft", t2, acc)["data"]
+    # 4a. R6:无到账记录拒提交(到账=科技处录入,funding 尚无该项目的款项)
+    r = post("/hx/acceptance/submit", t2, {"flowId": afid})
+    check("验收无到账拒提交(R6)", r.get("code") != 0 and "到账" in (r.get("msg") or ""),
+          str(r.get("msg"))[:60])
+    # 4b. 录到账 420000(=变更后合同经费)
+    r = post("/hx/funding", admin, {"projectId": pid_a, "amount": "420000.00",
+                                    "receivedDate": "2027-12-01", "payer": "审批测试委托单位",
+                                    "remark": "验收核算前置"})
+    assert r.get("code") == 0, "4b 前置:录到账失败:" + str(r)
+    # 4c. R3:比例合计≠100 拒;R4:金额合计≠到账拒;R5:使用>到账拒
+    post("/hx/acceptance/draft", t2, dict(acc, flowId=afid,
+        members=[dict(acc["members"][0], ratio="80.00", amount="420000.00")]))
+    r = post("/hx/acceptance/submit", t2, {"flowId": afid})
+    check("成员比例合计≠100拒(R3)", r.get("code") != 0 and "比例" in (r.get("msg") or ""),
+          str(r.get("msg"))[:60])
+    post("/hx/acceptance/draft", t2, dict(acc, flowId=afid,
+        members=[dict(acc["members"][0], ratio="100.00", amount="410000.00")]))
+    r = post("/hx/acceptance/submit", t2, {"flowId": afid})
+    check("成员金额合计≠到账拒(R4)", r.get("code") != 0 and "到账" in (r.get("msg") or ""),
+          str(r.get("msg"))[:60])
+    post("/hx/acceptance/draft", t2, dict(acc, flowId=afid, usedAmount="430000.00"))
+    r = post("/hx/acceptance/submit", t2, {"flowId": afid})
+    check("使用经费>到账拒(R5)", r.get("code") != 0 and "不得超过" in (r.get("msg") or ""),
+          str(r.get("msg"))[:60])
+    # 4d. 配平(比例100/金额=到账/使用≤到账)→提交通过;admin 代改验收单留痕(决策③)
+    assert post("/hx/acceptance/draft", t2, dict(acc, flowId=afid)).get("code") == 0, "4d 配平重存失败"
     assert post("/hx/acceptance/submit", t2, {"flowId": afid}).get("code") == 0, "A 验收提交失败"
+    r = post("/hx/%d/admin-save" % afid, admin,
+             dict(acc, flowId=afid, acceptSummary="科技处修正:全部委托内容已完成并验收(修订)"))
+    d = detail(afid, admin)
+    check("admin代改验收单留痕", r.get("code") == 0 and "admin_edit" in [x["action"] for x in d["records"]]
+          and "修订" in (d["flow"].get("acceptSummary") or ""), str(r.get("msg"))[:60])
     assert scan(t2, afid, "验收登记表").get("code") == 0, "A 验收回扫失败"
     r = post("/hx/%d/review" % afid, admin, {})   # 缺 verifiedAmount → 必拦
     check("验收核定金额必填", r.get("code") != 0 and "必填" in (r.get("msg") or ""), str(r.get("msg")))
@@ -196,8 +228,8 @@ def main():
           and p["status"] == "结题" and str(p.get("finishDate")) == str(date.today())
           and dec(d["hx"]["verifiedAmount"]) == Decimal("415000.00"),
           "status=%s finish=%s verified=%s" % (p["status"], p.get("finishDate"), d["hx"]["verifiedAmount"]))
-    check("终版两张四附件", finals == ["hx_final_docx", "hx_final_pdf",
-                                       "hx_final_report_docx", "hx_final_report_pdf"], str(finals))
+    # HTML转正(决策①):不再渲终版 docx 归档件——通过后打印只读页(带核定额/核定人)即终版
+    check("通过后无终版渲染件(HTML即交付)", finals == [], str(finals))
     check("验收时间线 verify+通知", "verify" in [x["action"] for x in d["records"]]
           and notify_has(t2, pid_a, "验收"), "")
 
@@ -225,9 +257,9 @@ def main():
           and d["flow"]["status"] == 4, "name=%s status=%s" % (d["project"]["name"], d["flow"]["status"]))
     r = post("/hx/%d/resubmit" % fid_b, t, {})
     d = detail(fid_b, t)
-    check("重交回已提交", r.get("code") == 0 and d["flow"]["status"] == 1
+    check("重交回已提交(无渲染附件)", r.get("code") == 0 and d["flow"]["status"] == 1
           and "resubmit" in [x["action"] for x in d["records"]]
-          and len(eff_atts(d, fid_b, "hx_docx")) == 1, "status=%s" % d["flow"]["status"])
+          and len(eff_atts(d, fid_b, "hx_docx")) == 0, "status=%s" % d["flow"]["status"])
 
     # 8. 回扫→常规退回(status=2)→重交:旧扫描件一并作废(spec §3.2)
     assert scan(t, fid_b, "登记表").get("code") == 0, "B 回扫失败"
@@ -239,11 +271,9 @@ def main():
           and "reject" in [x["action"] for x in d["records"]], "status=%s" % d["flow"]["status"])
     r = post("/hx/%d/resubmit" % fid_b, t, {})
     d = detail(fid_b, t)
-    check("重交作废旧扫描件+旧待签重渲", r.get("code") == 0 and d["flow"]["status"] == 1
-          and len(eff_atts(d, fid_b, "hx_scan")) == 0
-          and len(eff_atts(d, fid_b, "hx_docx")) == 1 and len(eff_atts(d, fid_b, "hx_pdf")) == 1,
-          "scan=%d docx=%d pdf=%d" % (len(eff_atts(d, fid_b, "hx_scan")),
-                                      len(eff_atts(d, fid_b, "hx_docx")), len(eff_atts(d, fid_b, "hx_pdf"))))
+    check("重交作废旧扫描件(HTML即交付,无重渲)", r.get("code") == 0 and d["flow"]["status"] == 1
+          and len(eff_atts(d, fid_b, "hx_scan")) == 0,
+          "scan=%d" % len(eff_atts(d, fid_b, "hx_scan")))
 
     # 9. 重新回扫→通过:编号与 A 唯一且格式合法
     assert scan(t, fid_b, "登记表").get("code") == 0, "B 二次回扫失败"

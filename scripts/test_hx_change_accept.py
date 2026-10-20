@@ -1,13 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-变更+验收流程接口冒烟(N3 Task21):draft 保存/分屏预览 docx/提交"未确认"拦截/必填联动/在途唯一防线下越权。
-SKIP 说明:N3 无科技处确认接口,project.audit_status 到不了 2,变更/验收 submit 只能测"未确认被拒";
-  全迁移(确认→提交→验收双单渲染→回扫)在 N4 审批接口就绪后由 test_hx_audit.py 覆盖。
-前置:应用已启动(dev),四类模板启用版在库,LibreOffice 就位;teacher/teacher123 为本人。
+变更+验收流程接口冒烟(N3 Task21;HTML转正 2026-10-21 改版):draft 保存/必填联动/字数硬校验/
+工号与不受限标志持久化回显/提交"未确认"拦截/在途唯一防线下越权。
+docx 分屏预览与待签渲染已随「HTML 即交付」退役(决策①),相关用例改为数据层断言;
+全迁移(确认→提交→回扫→审批)由 test_hx_audit.py 覆盖。
+前置:应用已启动(dev);teacher/teacher123 为本人。
 """
-import io
 import sys
-import zipfile
 
 import requests
 
@@ -33,33 +32,34 @@ def post(path, headers, body, timeout=30):
         return {"code": -1, "msg": "non-json response"}
 
 
-def preview_ok(resp):
-    """docx 预览流校验:HTTP 200 + zip 魔数 + document.xml 无 {{ 残留"""
-    if resp.status_code != 200 or resp.content[:2] != b"PK":
-        return False
-    with zipfile.ZipFile(io.BytesIO(resp.content)) as z:
-        return "{{" not in z.read("word/document.xml").decode("utf-8", "ignore")
-
-
 def main():
     t = login("teacher", "teacher123")
-    print("SKIP - 变更/验收全迁移(确认→提交→双单渲染→回扫)在 N4 审批接口就绪后由 test_hx_audit.py 覆盖;"
-          "本脚本只测未确认拦截与 draft/preview 全链(办法 C,计划 Task21 Step1)")
 
     # 前置:建登记草稿并提交(flow=register status=1,project.audit_status=1)
+    # HTML转正:预算合计=合同经费(规则R1)才可提交;成员工号/不受限标志新列随 T1 落库
     reg = {
         "name": "接口测试-变更验收用产线改造", "leaderName": "教师甲", "deptId": 1,
         "hx": {"projectType": "技术开发", "clientName": "测试委托公司", "clientNature": "企业",
                "contractAmount": "355000.00", "startDate": "2026-01-01", "endDate": "2027-12-31",
-               "useSchoolAsset": 0, "chargeMgmtFee": 1, "mgmtFeeAmount": "10000.00",
+               "useSchoolAsset": 0, "chargeMgmtFee": 1,
                "leaderEmail": "t@a.cn", "projectSummary": "摘要", "progressPlan": "进度"},
-        "members": [{"memberType": "教师", "name": "教师甲", "unit": "智能制造与装备学院",
+        "members": [{"memberType": "教师", "employeeNo": "20190001", "name": "教师甲",
+                      "unit": "智能制造与装备学院",
                       "title": "教授", "major": "机械工程", "duty": "总体设计", "sortNo": 1}],
-        "budgets": [{"subject": "业务费", "amount": "80000.00"}],
+        "budgets": [{"subject": "业务费", "amount": "355000.00"}],
     }
     r = post("/hx/register/draft", t, reg, timeout=120)
     assert r.get("code") == 0, "前置登记草稿失败:" + str(r)
     fid = r["data"]
+
+    # 0a/HTML转正 T1:工号/不受限标志持久化回显(登记详情)
+    d = requests.get(BASE + "/hx/%d" % fid, headers=t, timeout=30).json()["data"]
+    check("成员工号+预算不受限标志回显",
+          (d["members"] or [{}])[0].get("employeeNo") == "20190001"
+          and (d["budgets"] or [{}])[0].get("unrestricted") == 0,
+          "employeeNo=%r unrestricted=%r" % ((d["members"] or [{}])[0].get("employeeNo"),
+                                             (d["budgets"] or [{}])[0].get("unrestricted")))
+
     r = post("/hx/register/submit", t, {"flowId": fid}, timeout=120)
     assert r.get("code") == 0, "前置登记提交失败:" + str(r)
     d = requests.get(BASE + "/hx/%d" % fid, headers=t, timeout=30).json()["data"]
@@ -75,10 +75,10 @@ def main():
           str(r.get("data") if r.get("code") == 0 else r.get("msg")))
     cfid = r.get("data")
 
-    # 2. change/preview docx(zip 魔数+无 {{ 残留)
-    pv = requests.post(BASE + "/hx/preview", headers=t,
-                       json={"flowType": "change", "data": dict(chg, flowId=cfid)}, timeout=60)
-    check("变更分屏预览 docx", preview_ok(pv), "%d bytes" % len(pv.content))
+    # 2/HTML转正 T4:字数硬校验——变更内容>500 拒保存
+    r = post("/hx/change/draft", t, dict(chg, flowId=cfid, changeContent="长" * 501))
+    check("变更内容超 500 字拒保存", r.get("code") != 0 and "超过" in (r.get("msg") or ""),
+          str(r.get("msg"))[:60])
 
     # 3. change/submit → 期望拒绝(audit_status=1 未确认)
     r = post("/hx/change/submit", t, {"flowId": cfid})
@@ -102,12 +102,13 @@ def main():
     check("变更草稿编辑空值显式置空", had and d["flow"].get("newAmount") is None,
           "newAmount=%r" % d["flow"].get("newAmount"))
 
-    # 5. acceptance/draft 保存(is_on_time/outcome_form/成员 ratio+amount/学生/report_content)
-    acc = {"projectId": pid, "usedAmount": "348000.00", "isOnTime": 1,
+    # 5. acceptance/draft 保存(is_on_time/outcome_form/finish_date/成员 ratio+amount/学生/report_content)
+    acc = {"projectId": pid, "usedAmount": "348000.00", "finishDate": "2027-12-20", "isOnTime": 1,
            "outcomeForm": "技术报告,专利", "acceptSummary": "全部委托内容已完成并验收",
            "reportContent": "一、项目目标达成情况\n\n【正文】按合同完成全部改造内容并上线运行。\n\n二、经费使用情况\n\n使用经费34.80万元,执行率98%。",
            "members": [
-               {"memberType": "教师", "name": "教师甲", "unit": "智能制造与装备学院",
+               {"memberType": "教师", "employeeNo": "20190001", "name": "教师甲",
+                "unit": "智能制造与装备学院",
                 "title": "教授", "major": "机械工程", "duty": "总体设计",
                 "ratio": "60.00", "amount": "213000.00", "sortNo": 1},
                {"memberType": "学生", "name": "赵同学", "studentNo": "2023011234",
@@ -117,15 +118,10 @@ def main():
           str(r.get("data") if r.get("code") == 0 else r.get("msg")))
     afid = r.get("data")
 
-    # 6. acceptance/preview 两类模板(hx_acceptance+hx_report)各验 zip 魔数+无 {{
-    pa = requests.post(BASE + "/hx/preview", headers=t,
-                       json={"flowType": "acceptance", "tplType": "hx_acceptance",
-                             "data": dict(acc, flowId=afid)}, timeout=60)
-    pr = requests.post(BASE + "/hx/preview", headers=t,
-                       json={"flowType": "acceptance", "tplType": "hx_report",
-                             "data": dict(acc, flowId=afid)}, timeout=60)
-    check("验收分屏预览两张模板", preview_ok(pa) and preview_ok(pr),
-          "acceptance=%dB report=%dB" % (len(pa.content), len(pr.content)))
+    # 6/HTML转正 T1:验收「完成时间」(rp_hx_flow.finish_date 教师填报列)持久化回显
+    d = requests.get(BASE + "/hx/%d" % afid, headers=t, timeout=30).json()["data"]
+    check("验收完成时间回显", str(d["flow"].get("finishDate") or "")[:10] == "2027-12-20",
+          str(d["flow"].get("finishDate")))
 
     # 6b. 验收编辑路径空值显式置空(终审 F1 同款):改存草稿清空 isOnTime,详情须为空
     r = post("/hx/acceptance/draft", t, dict(acc, flowId=afid, isOnTime=None))

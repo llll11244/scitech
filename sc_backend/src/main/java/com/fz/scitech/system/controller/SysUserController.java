@@ -31,12 +31,16 @@ public class SysUserController {
         this.userMapper = userMapper;
     }
 
-    /** 当前登录用户信息(不含密码) */
+    /** 当前登录用户信息(不含密码;HTML转正:补 realName/phone=登记表联系电话带出,本人资料无泄露面) */
     @GetMapping("/me")
     public Result<Map<String, String>> me(HttpServletRequest request) {
+        SysUser me = userMapper.selectOne(Wrappers.<SysUser>lambdaQuery()
+                .eq(SysUser::getUsername, attr(request, "username")));
         return Result.ok(Map.of(
                 "username", attr(request, "username"),
-                "role", attr(request, "role")));
+                "role", attr(request, "role"),
+                "realName", me == null || me.getRealName() == null ? "" : me.getRealName(),
+                "phone", me == null || me.getPhone() == null ? "" : me.getPhone()));
     }
 
     /** 修改自己的密码 */
