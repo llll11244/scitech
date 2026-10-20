@@ -20,7 +20,7 @@ public class RpHxProject {
     /** 字典hx_project_type:技术开发/技术咨询/技术服务 */
     private String projectType;
     private String clientName;
-    /** 字典client_nature:政府部门/企业/事业单位/研究机构/其他 */
+    /** 字典hx_client_nature:政府部门/企业/事业单位/研究机构/其他 */
     private String clientNature;
     /** 合同经费(元) */
     private BigDecimal contractAmount;

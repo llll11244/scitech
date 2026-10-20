@@ -137,8 +137,8 @@ def main():
           "newLeaderName=%s" % d.get("newLeaderName"))
 
     # ================ ② 字典管理 ================
-    check("manage 教师拒", get("/dicts/manage?type=member_type", t).get("code") != 0, "")
-    rows = (get("/dicts/manage?type=member_type", admin).get("data") or [])
+    check("manage 教师拒", get("/dicts/manage?type=hx_member_type", t).get("code") != 0, "")
+    rows = (get("/dicts/manage?type=hx_member_type", admin).get("data") or [])
     sys_row = next((r for r in rows if r.get("dictValue") == "教师"), None)
     check("manage 全量含内置项", sys_row is not None and sys_row.get("isSystem") == 1,
           str(len(rows)))
@@ -147,8 +147,8 @@ def main():
           {"label": "老师"}).get("code") != 0, "")
     check("内置删拒", delete("/dicts/%d" % sys_row["id"], admin).get("code") != 0, "")
     check("内置停用 ok", put("/dicts/%d" % sys_row["id"], admin, {"status": 0}).get("code") == 0, "")
-    visible = (get("/dicts?type=member_type", t).get("data") or [])
-    manage = (get("/dicts/manage?type=member_type", admin).get("data") or [])
+    visible = (get("/dicts?type=hx_member_type", t).get("data") or [])
+    manage = (get("/dicts/manage?type=hx_member_type", admin).get("data") or [])
     check("停用后下拉隐藏/manage 仍可见",
           all(r.get("dictValue") != "教师" for r in visible)
           and any(r.get("dictValue") == "教师" and r.get("status") == 0 for r in manage), "")
@@ -158,7 +158,7 @@ def main():
     def dict_add(dtype, value, label):
         return req("POST", "/dicts", admin, params={"type": dtype, "value": value, "label": label})
 
-    for dtype, value in (("hx_outcome_form", "测试新成果"), ("member_type", "博士后")):
+    for dtype, value in (("hx_outcome_form", "测试新成果"), ("hx_member_type", "博士后")):
         stale = next((x for x in (get("/dicts/manage?type=%s" % dtype, admin).get("data") or [])
                       if x.get("dictValue") == value), None)
         if stale and stale.get("isSystem") == 0:
@@ -169,9 +169,9 @@ def main():
     new_row = next((x for x in (get("/dicts/manage?type=hx_outcome_form", admin).get("data") or [])
                     if x.get("dictValue") == "测试新成果"), None)
     check("新增项 manage 可见", new_row is not None, "")
-    r = dict_add("member_type", "博士后", "博士后")
+    r = dict_add("hx_member_type", "博士后", "博士后")
     check("非联动新增不带 remind", r.get("code") == 0 and not (r.get("data") or {}).get("remind"), "")
-    postdoc = next((x for x in (get("/dicts/manage?type=member_type", admin).get("data") or [])
+    postdoc = next((x for x in (get("/dicts/manage?type=hx_member_type", admin).get("data") or [])
                     if x.get("dictValue") == "博士后"), None)
     check("自建项改 label ok", put("/dicts/%d" % postdoc["id"], admin,
           {"label": "博士后人员"}).get("code") == 0, "")
@@ -186,8 +186,8 @@ def main():
                  if x.get("dictValue") == "测试新成果"), None)
     if redo:
         delete("/dicts/%d" % redo["id"], admin)   # 清理
-    check("重复取值拒", dict_add("member_type", "教师", "教师2").get("code") != 0, "")
-    pd = next((x for x in (get("/dicts/manage?type=member_type", admin).get("data") or [])
+    check("重复取值拒", dict_add("hx_member_type", "教师", "教师2").get("code") != 0, "")
+    pd = next((x for x in (get("/dicts/manage?type=hx_member_type", admin).get("data") or [])
                if x.get("dictValue") == "博士后"), None)
     if pd:
         delete("/dicts/%d" % pd["id"], admin)   # 清理自建项
@@ -246,6 +246,20 @@ def main():
     check("新密码可登录", get("/users/me", t4).get("code") == 0, "")
     # 收尾:停用测试号(无删,留存停用态)
     put("/users/%s/status" % uid_new, admin, {"status": 0})
+
+    # ---- 系统参数:管理费比例(admin 可改/教师拒/值校验;改后恢复默认防污染其他脚本) ----
+    v0 = get("/config/hx_mgmt_fee_rate", t).get("data")
+    check("管理费比例可读(登录即可)", v0 is not None, str(v0))
+    check("管理费比例改值 teacher 拒",
+          put("/config/hx_mgmt_fee_rate", t, {"value": "5"}).get("code") != 0, "")
+    check("非白名单键改拒(deliver_pdf_visible)",
+          put("/config/deliver_pdf_visible", admin, {"value": "true"}).get("code") != 0, "")
+    for bad in ["abc", "-1", "101", "1.234", None]:
+        check("比例非法值拒(%r)" % (bad,),
+              put("/config/hx_mgmt_fee_rate", admin, {"value": bad}).get("code") != 0, "")
+    check("比例改 5% ok", put("/config/hx_mgmt_fee_rate", admin, {"value": "5"}).get("code") == 0, "")
+    check("比例改后可读", get("/config/hx_mgmt_fee_rate", t).get("data") == "5", "")
+    check("比例恢复默认 2%", put("/config/hx_mgmt_fee_rate", admin, {"value": "2"}).get("code") == 0, "")
 
     failed = [n for n, ok in results if not ok]
     print("\n%d/%d 通过" % (len(results) - len(failed), len(results)))

@@ -111,14 +111,15 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { addDict, deleteDict, manageDicts, updateDict } from '../../api/system'
 
-/* 种子 7 类(顺序=tab 顺序);linked=模板联动(增删强提醒) */
+/* 种子 8 类(顺序=tab 顺序);linked=模板联动(增删强提醒);2026-10-19 决策#32 前缀对齐+新增职称 */
 const KNOWN_TYPES = [
   { type: 'hx_project_type', label: '横向项目类型', linked: true },
-  { type: 'client_nature', label: '委托单位性质', linked: true },
+  { type: 'hx_client_nature', label: '委托单位性质', linked: true },
   { type: 'hx_outcome_form', label: '成果形式', linked: true },
-  { type: 'change_type', label: '变更类型', linked: true },
-  { type: 'budget_subject_hx', label: '横向预算科目', linked: true },
-  { type: 'member_type', label: '成员类型', linked: false },
+  { type: 'hx_change_type', label: '变更类型', linked: true },
+  { type: 'hx_budget_subject', label: '横向预算科目', linked: true },
+  { type: 'hx_member_type', label: '成员类型', linked: false },
+  { type: 'title', label: '职称', linked: false },
   { type: 'hx_scan_doc_type', label: '盖章扫描件类型', linked: false }
 ]
 

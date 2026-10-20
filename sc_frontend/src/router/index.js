@@ -102,6 +102,12 @@ const routes = [
         name: 'BackupManage',
         component: () => import('../views/admin/BackupManage.vue'),
         meta: { title: '数据备份', roles: ['admin'] }
+      },
+      {
+        path: 'admin/params',
+        name: 'SysParams',
+        component: () => import('../views/admin/SysParams.vue'),
+        meta: { title: '系统参数', roles: ['admin'] }
       }
     ]
   }

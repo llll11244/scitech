@@ -287,7 +287,7 @@ function normDate(v) {
 }
 
 onMounted(async () => {
-  const [rows, ct] = await Promise.all([myProjects(), listDict('change_type')])
+  const [rows, ct] = await Promise.all([myProjects(), listDict('hx_change_type')])
   confirmedProjects.value = (rows || []).filter((p) => p.auditStatus === 2)
   dictChangeType.value = ct
   if (route.query.flowId) {

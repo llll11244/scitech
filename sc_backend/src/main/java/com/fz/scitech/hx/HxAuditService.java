@@ -62,11 +62,12 @@ public class HxAuditService {
     private final RenderModelBuilder modelBuilder;
     private final PdfRenderService pdfRenderService;
     private final HxService hxService;
+    private final MgmtFeePolicy mgmtFeePolicy;
 
     public HxAuditService(RpProjectMapper projectMapper, RpHxProjectMapper hxMapper, RpHxFlowMapper flowMapper,
                           RpMemberMapper memberMapper, SysUserMapper userMapper, SysDeptMapper deptMapper,
                           SysNotifyMapper notifyMapper, RenderModelBuilder modelBuilder,
-                          PdfRenderService pdfRenderService, HxService hxService) {
+                          PdfRenderService pdfRenderService, HxService hxService, MgmtFeePolicy mgmtFeePolicy) {
         this.projectMapper = projectMapper;
         this.hxMapper = hxMapper;
         this.flowMapper = flowMapper;
@@ -77,6 +78,7 @@ public class HxAuditService {
         this.modelBuilder = modelBuilder;
         this.pdfRenderService = pdfRenderService;
         this.hxService = hxService;
+        this.mgmtFeePolicy = mgmtFeePolicy;
     }
 
     // ---------- 审批列表 ----------
@@ -180,6 +182,10 @@ public class HxAuditService {
         boolean hxChanged = false;
         if (types.contains("项目经费")) {
             hu.set(RpHxProject::getContractAmount, flow.getNewAmount());
+            // 管理费金额按当时比例随经费重算(收取标志取实态;收取关掉时算得 null 亦为实态)
+            RpHxProject hx = hxMapper.selectById(pid);
+            hu.set(RpHxProject::getMgmtFeeAmount,
+                    hx == null ? null : mgmtFeePolicy.compute(hx.getChargeMgmtFee(), flow.getNewAmount()));
             hxChanged = true;
         }
         if (types.contains("执行周期")) {

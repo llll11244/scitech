@@ -53,6 +53,10 @@
             <el-icon><Box /></el-icon>
             <span>数据备份</span>
           </el-menu-item>
+          <el-menu-item v-if="userStore.isAdmin" index="/admin/params">
+            <el-icon><Setting /></el-icon>
+            <span>系统参数</span>
+          </el-menu-item>
         </template>
       </el-menu>
     </el-aside>

@@ -36,6 +36,12 @@ def main():
     check("保存草稿", r.get("code") == 0 and r["data"] > 0, str(r.get("data")))
     fid = r["data"]
 
+    # 1a. 管理费金额后端换算:传 10000 被忽略,按科技处配置比例 2% × 355000 = 7100.00
+    d = requests.get(BASE + "/hx/%d" % fid, headers=t).json()["data"]
+    mfee = d["hx"].get("mgmtFeeAmount")
+    check("管理费金额=配置比例换算(忽略传值)", mfee is not None and abs(float(mfee) - 7100.0) < 0.005,
+          "mgmtFeeAmount=%r" % mfee)
+
     # 2. 预览(分屏 docx 流:zip 魔数+无 {{ 残留)
     import io, zipfile
     dto2 = dict(dto); dto2["flowId"] = fid
@@ -113,6 +119,18 @@ def main():
     check("登记草稿编辑空值显式置空",
           d["hx"].get("mgmtFeeAmount") is None and d["hx"].get("leaderEmail") is None,
           "mgmtFeeAmount=%r leaderEmail=%r" % (d["hx"].get("mgmtFeeAmount"), d["hx"].get("leaderEmail")))
+
+    # 10a2/管理费比例联动:科技处改 5% → 教师重存(charge=1)→ 355000×5%=17750.00;收尾恢复 2%
+    ra = requests.put(BASE + "/config/hx_mgmt_fee_rate", headers=admin, json={"value": "5"}).json()
+    assert ra.get("code") == 0, "10a2 前置:改比例失败:" + str(ra)
+    r = requests.post(BASE + "/hx/register/draft", headers=t,
+                      json=dict(dto, flowId=fid2, hx=dict(dto["hx"], chargeMgmtFee=1))).json()
+    d = requests.get(BASE + "/hx/%d" % fid2, headers=t).json()["data"]
+    mfee = d["hx"].get("mgmtFeeAmount")
+    check("比例改 5% 后重存按新比例换算",
+          r.get("code") == 0 and mfee is not None and abs(float(mfee) - 17750.0) < 0.005,
+          "mgmtFeeAmount=%r" % mfee)
+    requests.put(BASE + "/config/hx_mgmt_fee_rate", headers=admin, json={"value": "2"})
 
     # 10b/Task28(N3 终审挂账):members=null(字段未传)=不动成员表;显式空列表=清空
     r = requests.post(BASE + "/hx/register/draft", headers=t,

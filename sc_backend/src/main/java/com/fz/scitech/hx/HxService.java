@@ -95,6 +95,7 @@ public class HxService {
     private final SysUserMapper userMapper;
     private final SysDictMapper dictMapper;
     private final SysConfigMapper configMapper;
+    private final MgmtFeePolicy mgmtFeePolicy;
     private final ObjectMapper objectMapper;
 
     @Value("${sc.upload-dir:./upload}")
@@ -105,7 +106,7 @@ public class HxService {
                      RpAttachmentMapper attachmentMapper, RpFundingRecordMapper fundingMapper,
                      RenderModelBuilder modelBuilder, PdfRenderService pdfRenderService,
                      SysDeptMapper deptMapper, SysUserMapper userMapper, SysDictMapper dictMapper,
-                     SysConfigMapper configMapper, ObjectMapper objectMapper) {
+                     SysConfigMapper configMapper, MgmtFeePolicy mgmtFeePolicy, ObjectMapper objectMapper) {
         this.projectMapper = projectMapper;
         this.hxMapper = hxMapper;
         this.flowMapper = flowMapper;
@@ -120,6 +121,7 @@ public class HxService {
         this.userMapper = userMapper;
         this.dictMapper = dictMapper;
         this.configMapper = configMapper;
+        this.mgmtFeePolicy = mgmtFeePolicy;
         this.objectMapper = objectMapper;
     }
 
@@ -176,6 +178,8 @@ public class HxService {
             hx.setCreateBy(username);
         }
         copyHx(dto.getHx(), hx);
+        // 管理费金额后端换算(比例=科技处配置,教师不可设):覆盖入参,收取关掉→null;每次保存重算,提交即快照
+        hx.setMgmtFeeAmount(mgmtFeePolicy.compute(hx.getChargeMgmtFee(), hx.getContractAmount()));
         if (hxNew) {
             hxMapper.insert(hx);
         } else {
@@ -691,6 +695,8 @@ public class HxService {
                 RpHxProject hx = new RpHxProject();
                 if (dto.getHx() != null) {
                     copyHx(dto.getHx(), hx);
+                    // 与保存同口径:预览即最终落库口径(金额=配置比例换算,不取表单传值)
+                    hx.setMgmtFeeAmount(mgmtFeePolicy.compute(hx.getChargeMgmtFee(), hx.getContractAmount()));
                 }
                 List<RpMember> members = new ArrayList<>();
                 if (dto.getMembers() != null) {
@@ -1091,7 +1097,7 @@ public class HxService {
         hx.setEndDate(parseDate(h.getEndDate()));
         hx.setUseSchoolAsset(h.getUseSchoolAsset());
         hx.setChargeMgmtFee(h.getChargeMgmtFee());
-        hx.setMgmtFeeAmount(h.getMgmtFeeAmount());
+        // mgmtFeeAmount 不入 DTO(比例归科技处,金额由 MgmtFeePolicy 换算)
         hx.setLeaderEmail(h.getLeaderEmail());
         hx.setProjectSummary(h.getProjectSummary());
         hx.setProgressPlan(h.getProgressPlan());

@@ -163,6 +163,9 @@ def main():
           and d["project"]["applyUserId"] == t2_id and d["project"]["leaderName"] == "测试教师乙",
           "amount=%s end=%s owner=%s leader=%s" % (d["hx"]["contractAmount"], d["hx"]["endDate"],
                                                     d["project"]["applyUserId"], d["project"]["leaderName"]))
+    # 3c. 管理费随经费重算:登记 355000×2%=7100 → 变更通过 420000×2%=8400(比例归科技处配置)
+    check("变更通过管理费随经费重算", dec(d["hx"]["mgmtFeeAmount"]) == Decimal("8400.00"),
+          "mgmtFeeAmount=%s" % d["hx"].get("mgmtFeeAmount"))
     check("变更不改台账状态/通知新负责人", d["project"]["auditStatus"] == 2 and d["project"]["status"] == "立项"
           and notify_has(t2, pid_a, "变更"),
           "audit=%s status=%s" % (d["project"]["auditStatus"], d["project"]["status"]))

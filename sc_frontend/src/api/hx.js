@@ -47,6 +47,8 @@ export async function listDepts() {
   return rows.map((d) => ({ id: d.id, name: d.name }))
 }
 export const getConfig = (key) => request.get(`/config/${key}`)
+/** 修改值型配置(admin,仅白名单键:hx_mgmt_fee_rate 管理费比例%) */
+export const putConfig = (key, value) => request.put(`/config/${key}`, { value })
 
 /* ---------- blob 型:分屏预览与交付下载 ---------- */
 /** 表单数据直出 docx 预览流(blob);tplType=验收流程双模板切换(hx_acceptance/hx_report) */

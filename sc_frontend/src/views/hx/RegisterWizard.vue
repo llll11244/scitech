@@ -67,8 +67,9 @@
               </el-radio-group>
             </el-form-item>
             <el-form-item v-if="form.hx.chargeMgmtFee === 1" label="管理费金额(元)">
-              <el-input-number v-model="form.hx.mgmtFeeAmount" :min="0" :precision="2" :controls="false"
-                disabled placeholder="由科技处填写" class="w-200" />
+              <el-input-number :model-value="mgmtFeePreview" :min="0" :precision="2" :controls="false"
+                disabled placeholder="自动换算" class="w-200" />
+              <div class="tip-txt">比例由科技处统一设定(当前 {{ mgmtRate == null ? '—' : mgmtRate }}%),金额 = 合同经费 × 比例自动换算,不可自行修改。</div>
             </el-form-item>
             <el-form-item label="负责人邮箱">
               <el-input v-model="form.hx.leaderEmail" placeholder="用于接收通知(选填)" @change="schedule" />
@@ -100,7 +101,10 @@
             </el-table-column>
             <el-table-column label="职称" width="110">
               <template #default="{ row }">
-                <el-input v-model="row.title" size="small" placeholder="职称" @change="schedule" />
+                <el-select v-model="row.title" size="small" filterable allow-create default-first-option
+                           placeholder="选择或输入" @change="schedule">
+                  <el-option v-for="o in dictTitle" :key="o.value" :label="o.label" :value="o.value" />
+                </el-select>
               </template>
             </el-table-column>
             <el-table-column label="从事专业" width="120">
@@ -229,12 +233,12 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
-  flowDetail, listDepts, listDict, previewDocx, resubmit, saveRegisterDraft, submitRegister,
-  uploadContract
+  flowDetail, getConfig, listDepts, listDict, previewDocx, resubmit, saveRegisterDraft,
+  submitRegister, uploadContract
 } from '../../api/hx'
 import { useUserStore } from '../../stores/user'
 import DocxPane from './DocxPane.vue'
@@ -252,6 +256,7 @@ const depts = ref([])
 const dictProjectType = ref([])
 const dictClientNature = ref([])
 const dictMemberType = ref([])
+const dictTitle = ref([])
 
 /* ---------- 表单 ---------- */
 const form = reactive({
@@ -262,8 +267,17 @@ const form = reactive({
   hx: {
     projectType: '', clientName: '', clientNature: '', contractAmount: null,
     startDate: '', endDate: '', useSchoolAsset: 0, chargeMgmtFee: 0,
-    mgmtFeeAmount: null, leaderEmail: '', projectSummary: '', progressPlan: ''
+    leaderEmail: '', projectSummary: '', progressPlan: ''
   }
+})
+
+/* ---------- 管理费比例(科技处配置,教师只读换算) ---------- */
+const mgmtRate = ref(null)   // %(sys_config.hx_mgmt_fee_rate;null=未取到)
+const mgmtFeePreview = computed(() => {
+  if (form.hx.chargeMgmtFee !== 1 || form.hx.contractAmount == null || mgmtRate.value == null) {
+    return null
+  }
+  return +(form.hx.contractAmount * mgmtRate.value / 100).toFixed(2)   // 展示口径;落库以后端换算为准
 })
 const members = ref([newMember()])
 const budgets = ref([])
@@ -463,7 +477,6 @@ async function loadDraft(flowId) {
   form.hx.endDate = hx.endDate ? String(hx.endDate).slice(0, 10) : ''
   form.hx.useSchoolAsset = hx.useSchoolAsset ?? 0
   form.hx.chargeMgmtFee = hx.chargeMgmtFee ?? 0
-  form.hx.mgmtFeeAmount = hx.mgmtFeeAmount
   form.hx.leaderEmail = hx.leaderEmail || ''
   form.hx.projectSummary = hx.projectSummary || ''
   form.hx.progressPlan = hx.progressPlan || ''
@@ -482,17 +495,20 @@ async function loadDraft(flowId) {
 
 onMounted(async () => {
   form.leaderName = userStore.userInfo?.realName || ''
-  const [ds, pt, cn, mt, bs] = await Promise.all([
+  getConfig('hx_mgmt_fee_rate').then((v) => { mgmtRate.value = v == null ? null : Number(v) })
+  const [ds, pt, cn, mt, bs, tt] = await Promise.all([
     listDepts(),
     listDict('hx_project_type'),
-    listDict('client_nature'),
-    listDict('member_type'),
-    listDict('budget_subject_hx')
+    listDict('hx_client_nature'),
+    listDict('hx_member_type'),
+    listDict('hx_budget_subject'),
+    listDict('title')
   ])
   depts.value = ds
   dictProjectType.value = pt
   dictClientNature.value = cn
   dictMemberType.value = mt
+  dictTitle.value = tt
   budgets.value = bs.map((b) => ({ subject: b.label, amount: null }))
   if (route.params.flowId) {
     await loadDraft(Number(route.params.flowId))

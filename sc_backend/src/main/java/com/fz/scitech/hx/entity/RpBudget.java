@@ -8,7 +8,7 @@ import lombok.Data;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-/** 项目预算明细表(rp_budget):横向=budget_subject_hx 6 科目,金额单位元(决策#25) */
+/** 项目预算明细表(rp_budget):横向=hx_budget_subject 6 科目,金额单位元(决策#25) */
 @Data
 @TableName("rp_budget")
 public class RpBudget {

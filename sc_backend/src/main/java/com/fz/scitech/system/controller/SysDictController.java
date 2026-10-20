@@ -36,9 +36,9 @@ import java.util.Set;
 @Validated
 public class SysDictController {
 
-    /** 模板联动字典类型(增删取值须提醒同步改模板) */
+    /** 模板联动字典类型(增删取值须提醒同步改模板;2026-10-19 决策#32 前缀对齐改名) */
     private static final Set<String> TEMPLATE_LINKED = Set.of(
-            "hx_project_type", "client_nature", "hx_outcome_form", "change_type", "budget_subject_hx");
+            "hx_project_type", "hx_client_nature", "hx_outcome_form", "hx_change_type", "hx_budget_subject");
     private static final String REMIND_TEXT = "该字典取值已印在 PDF 模板勾选组/科目行,请同步更新模板并重新上传";
 
     private final SysDictMapper dictMapper;

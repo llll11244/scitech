@@ -98,7 +98,7 @@ public class RenderModelBuilder {
         m.put("projectTypeChecks", checks(dictLabels("hx_project_type"), hx.getProjectType()));
         m.put("startEndDate", startEndDate(hx.getStartDate(), hx.getEndDate()));
         m.put("clientName", s(hx.getClientName()));
-        m.put("clientNatureChecks", checks(dictLabels("client_nature"), hx.getClientNature()));
+        m.put("clientNatureChecks", checks(dictLabels("hx_client_nature"), hx.getClientNature()));
         m.put("contractAmount", money(hx.getContractAmount()));
         m.put("contractAmountCapital", hx.getContractAmount() == null ? "" : RmbCapitalUtil.toCapital(hx.getContractAmount()));
         m.put("leaderPhone", s(p.getLeaderPhone()));      // sys_user.phone,HxService 填充
@@ -124,7 +124,7 @@ public class RenderModelBuilder {
         m.put("projectTypeChecks", checks(dictLabels("hx_project_type"), hx.getProjectType()));
         m.put("leaderPhone", s(leaderPhone));
         String[] types = splitTrim(flow.getChangeType());
-        m.put("changeTypeChecks", checks(dictLabels("change_type"), types));
+        m.put("changeTypeChecks", checks(dictLabels("hx_change_type"), types));
         m.put("changeContent", s(flow.getChangeContent()));
         m.put("changeReason", s(flow.getChangeReason()));
         return m;
@@ -137,7 +137,7 @@ public class RenderModelBuilder {
         m.put("projectTypeChecks", checks(dictLabels("hx_project_type"), hx.getProjectType()));
         m.put("startEndDate", startEndDate(hx.getStartDate(), hx.getEndDate()));
         m.put("clientName", s(hx.getClientName()));
-        m.put("clientNatureChecks", checks(dictLabels("client_nature"), hx.getClientNature()));
+        m.put("clientNatureChecks", checks(dictLabels("hx_client_nature"), hx.getClientNature()));
         m.put("receivedAmountWan", wan(receivedTotal));
         m.put("usedAmountWan", wan(flow.getUsedAmount()));
         List<RpMember> teachers = teachers(members);

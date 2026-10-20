@@ -49,9 +49,9 @@ class RenderModelBuilderTest {
 
     RenderModelBuilderTest() {
         givenDict("hx_project_type", "技术开发", "技术咨询", "技术服务");
-        givenDict("client_nature", "政府部门", "企业", "事业单位", "研究机构", "其他");
+        givenDict("hx_client_nature", "政府部门", "企业", "事业单位", "研究机构", "其他");
         givenDict("hx_outcome_form", "技术报告", "鉴定报告", "专利", "咨询报告", "其他");
-        givenDict("change_type", "项目经费", "执行周期", "项目负责人", "委托内容", "其他约定");
+        givenDict("hx_change_type", "项目经费", "执行周期", "项目负责人", "委托内容", "其他约定");
         // dictLabels 走 selectList(LambdaQueryWrapper),按 wrapper 参数值(含 dict_type 字符串)分发回字典行;
         // MP 3.5.7 参数惰性填充:须先触发 getSqlSegment() 渲染,paramNameValuePairs 才有值
         when(dictMapper.selectList(any())).thenAnswer(inv -> {

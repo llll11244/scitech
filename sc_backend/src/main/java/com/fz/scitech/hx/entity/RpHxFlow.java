@@ -22,11 +22,11 @@ public class RpHxFlow {
     private String flowType;
     /** 0草稿/1已提交待回扫/2已回扫待审核/3通过/4退回 */
     private Integer status;
-    /** 字典change_type,逗号分隔多选 */
+    /** 字典hx_change_type,逗号分隔多选 */
     private String changeType;
     private String changeReason;
     private String changeContent;
-    /** 变更后经费(元,change_type含项目经费时必填) */
+    /** 变更后经费(元,change_type含项目经费时必填;字典类型名已改hx_change_type) */
     private BigDecimal newAmount;
     /** 变更后结束日(含执行周期时必填) */
     private LocalDate newEndDate;
