@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>横向科研项目重要事项变更表</title>
+<style>
+  /* ===== 风格基准:校内 OA 审批单(engine_openform 表单页) ===== */
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { margin:0 5px; background:#fff; font-family:'Microsoft YaHei','微软雅黑','SimSun','宋体',sans-serif;
+         font-size:14px; color:#000; }
+  .page { max-width:1000px; margin:0 auto; padding:52px 6px 0; }
+
+  /* ===== 居中镂空水印(屏显常驻;打印/导出PDF 每页重复) ===== */
+  .watermark { position:fixed; left:0; top:0; right:0; bottom:0; display:flex;
+               align-items:center; justify-content:center; pointer-events:none;
+               z-index:-1; opacity:.30; }
+  .watermark img { width:min(135mm, 78vw); }
+
+  /* ===== 标题区(信笺式:Logo 左上,标题居中) ===== */
+  .toparea { position:relative; display:flex; align-items:center; justify-content:center;
+             min-height:72px; padding:4px 0 12px; }
+  .toparea b { font-size:20px; font-weight:bold; }
+  .hlogo { position:absolute; left:2px; top:50%; transform:translateY(-50%); height:68px; }
+
+  /* ===== 表单表格(linkeytable 风格;主色 rgb(62,173,229)) ===== */
+  table.ftab { width:100%; border-collapse:collapse; table-layout:fixed; margin-top:4px; }
+  table.ftab td { border:1px solid #a6a6a6; padding:6px 8px; font-size:14px;
+                  vertical-align:middle; overflow-wrap:break-word; line-height:1.7; }
+  td.lbl { background:#E9F6FD; }
+  td.chk { letter-spacing:1px; }
+  .para { text-align:justify; }
+  .sign-block { min-height:26mm; position:relative; }
+  .sign-line { display:flex; flex-direction:column; justify-content:flex-end; align-items:flex-end; height:26mm; text-align:right; line-height:2.0; }
+  .inline-sign { text-align:right; line-height:2.0; margin-top:10px; }
+  .footnote { font-size:12px; color:#000; margin:8px 2px 26px; line-height:1.7; }
+
+  /* 勾选组选项(可点击切换 √/□;multi 组可多选,其余单选) */
+  .opt { cursor:pointer; user-select:none; }
+  .opt:hover { color:#14719F; }
+
+  /* 变更内容:勾选事项的原信息带出行(系统带出,浅蓝底) */
+  .oriline { background:#F0FAFE; padding:3px 8px; margin:2px 0; }
+  .orinone { background:none; color:#999; }
+
+  /* ===== 底部工具条(屏显) ===== */
+  .btoolbar { position:fixed; top:10px; right:12px; z-index:100; text-align:right;
+              padding:6px 12px; font-size:13px; background:rgba(255,255,255,.92);
+              border:1px solid #C9E9F9; border-radius:16px; box-shadow:0 1px 6px rgba(23,145,204,.18); }
+  .btoolbar a { color:#1791CC; margin-left:16px; cursor:pointer; }
+  .btoolbar .tip { color:#888; margin-left:10px; }
+  .btoolbar .hintswitch { color:#666; cursor:pointer; }
+  .btoolbar .hintswitch input { vertical-align:-1px; margin-right:3px; }
+
+  /* ===== 填写提示层(仅屏显辅助;打印/导出PDF一律隐藏) ===== */
+  .hint { color:#8a8a8a; font-size:12px; line-height:1.65; }
+  .hint b { color:#777; font-weight:bold; }
+  details.hint { margin-top:4px; }
+  details.hint summary { cursor:pointer; color:#1791CC; }
+  details.hint[open] summary { margin-bottom:2px; }
+  .hint ul { margin:2px 0 4px; padding-left:18px; }
+  .hint li { margin:1px 0; }
+  body.nohints .hint { display:none; }
+
+  /* ===== 打印 ===== */
+  @page { size:A4; margin:10mm 8mm; }
+  @media print {
+    .btoolbar, .hint, .scr { display:none !important; }
+    .page { max-width:none; padding:0; }
+    body { margin:0; }
+    tr { page-break-inside:avoid; }
+    .watermark { opacity:.30; }
+    .watermark img { width:150mm; }
+  }
+</style>
+</head>
+<body>
+<div class="watermark"><img src="assets/watermark.png" alt=""></div>
+
+<div class="page">
+
+  <div class="btoolbar">
+    <label class="hintswitch"><input type="checkbox" checked onchange="document.body.classList.toggle('nohints',!this.checked)">显示填写提示</label>
+    <span class="tip">导出PDF = 打印对话框选「另存为PDF」</span>
+    <a onclick="window.print()">打印</a>
+  </div>
+
+  <div class="toparea">
+    <img class="hlogo" src="assets/logo.png" alt="成都轻工职业技术大学">
+    <b>成都轻工职业技术大学横向科研项目重要事项变更表</b>
+  </div>
+
+  <table class="ftab">
+    <colgroup><col style="width:17%"><col style="width:33%"><col style="width:15%"><col></colgroup>
+    <tbody>
+      <tr>
+        <td class="lbl">项目名称</td><td colspan="3">某纺织企业智能化生产线改造技术服务项目</td>
+      </tr>
+      <tr>
+        <td class="lbl">项目编号</td><td>HX2026-001</td>
+        <td class="lbl">项目类别</td><td class="chk"><span class="opt">√技术开发</span>　<span class="opt">□技术咨询</span>　<span class="opt">□技术服务</span></td>
+      </tr>
+      <tr>
+        <td class="lbl">项目负责人</td><td>张三</td>
+        <td class="lbl">联系方式</td><td>13800001111</td>
+      </tr>
+      <tr>
+        <td class="lbl">委托单位</td><td colspan="3">某某纺织有限公司(性质:企业)</td>
+      </tr>
+
+      <tr>
+        <td class="lbl">变更事项</td>
+        <td class="chk multi" colspan="3"><span class="opt" data-key="fee">√项目经费</span>　<span class="opt" data-key="period">□执行周期</span>　<span class="opt" data-key="leader">□项目负责人</span>　<span class="opt" data-key="content">□委托内容</span>　<span class="opt" data-key="other">□其他约定</span></td>
+      </tr>
+      <tr>
+        <td class="lbl">变更内容</td>
+        <td colspan="3"><div class="cmpshow"></div>
+          <div class="para" style="min-height:18mm">因客户追加二期工位改造需求,合同经费由355000元调整为420000元,其余条款不变。</div>
+          <details class="hint">
+            <summary>示例:变更内容怎么写</summary>
+            <ul>
+              <li><b>说明</b>:对合同约定的关键内容进行调整,可能影响项目目标、进度、经费、技术路线等核心要素。如:对项目成果的知识产权分配(如专利、软件著作权、论文署名等)进行调整。</li>
+              <li><b>示例</b>——场景:原约定专利申请权归企业所有,后经协商,调整为"双方共同申请专利,企业拥有独占实施权"。变更内容:专利申请权从"企业单独所有"变更为"双方共有",实施权归属不变。</li>
+            </ul>
+          </details></td>
+      </tr>
+      <tr>
+        <td class="lbl">申请变更的原因</td>
+        <td colspan="3">
+          <div class="para" style="min-height:16mm">委托方生产订单增加,双方协商追加改造范围,需相应调整合同经费。</div>
+          <div class="hint">示例:因涉及后续收益分配调整,需修订知识产权条款。</div>
+          <div class="inline-sign">申请人(签字):&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;年&emsp;月&emsp;日<br>
+            变更后项目负责人(签字):&emsp;&emsp;&emsp;&emsp;年&emsp;月&emsp;日</div>
+        </td>
+      </tr>
+
+      <tr>
+        <td class="lbl">委托单位意见</td>
+        <td colspan="3" class="sign-block"><div class="hint">参考措辞(纸面留白手写):同意该项目重要事项的变更申请。</div><div class="sign-line">负责人(签字):&emsp;&emsp;&emsp;(盖章)<br>年&emsp;月&emsp;日</div></td>
+      </tr>
+      <tr>
+        <td class="lbl">项目负责人所在单位意见</td>
+        <td colspan="3" class="sign-block"><div class="hint">参考措辞(纸面留白手写):同意该项目重要事项的变更申请。</div><div class="sign-line">负责人(签字):&emsp;&emsp;&emsp;(盖章)<br>年&emsp;月&emsp;日</div></td>
+      </tr>
+      <tr>
+        <td class="lbl">科技处意见</td>
+        <td colspan="3" class="sign-block"><div class="sign-line">负责人(签字):&emsp;&emsp;&emsp;(盖章)<br>年&emsp;月&emsp;日</div></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p class="footnote">注:变更项目负责人、研究人员、合同,请填写此表。其中,变更人员的,请变更人员亲笔签名,各单位或部门盖章并由负责人签字。本表一式三份:科研处一份,所在部门一份,项目负责人一份。双面打印,控制在两页内(分页打印需委托方盖骑缝章)。</p>
+
+</div>
+
+<script>
+// 勾选组:点击选项切换 √/□;multi 组可多选,其余单选(打印输出当前勾选状态)
+document.querySelectorAll('.opt').forEach(function (o) {
+  o.addEventListener('click', function () {
+    var td = o.closest('td');
+    var multi = td.classList.contains('multi');
+    var on = o.textContent.charAt(0) === '√';
+    if (!multi) {
+      td.querySelectorAll('.opt').forEach(function (s) { s.textContent = '□' + s.textContent.slice(1); });
+    }
+    o.textContent = (on && multi ? '□' : '√') + o.textContent.slice(1);
+    syncCmp();
+  });
+});
+// 变更内容:勾选哪项,在此显示该项原信息(系统带出,供对照填写)
+var ORIG = {
+  fee:     ['项目经费', '人民币 355000.00 元(大写:叁拾伍万伍仟元整)'],
+  period:  ['执行周期', '2026年01月至2027年12月'],
+  leader:  ['项目负责人', '张三'],
+  content: ['委托内容', '智能化生产线一期改造技术服务'],
+  other:   ['其他约定', '专利等成果知识产权归委托方单独所有']
+};
+function syncCmp() {
+  var box = document.querySelector('.cmpshow');
+  var html = '';
+  document.querySelectorAll('.chk.multi .opt').forEach(function (o) {
+    if (o.textContent.charAt(0) !== '√') return;
+    var it = ORIG[o.getAttribute('data-key')];
+    if (it) html += '<div class="oriline">· ' + it[0] + '(原,系统带出):' + it[1] + '</div>';
+  });
+  box.innerHTML = html || '<div class="oriline orinone">尚未勾选变更事项——勾选后自动带出对应项原信息</div>';
+}
+syncCmp();
+</script>
+</body>
+</html>

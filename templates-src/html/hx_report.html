@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>横向科研项目验收报告</title>
+<style>
+  /* ===== 与三张审批单同壳;主色 rgb(62,173,229) ===== */
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { margin:0 5px; background:#fff; font-family:'Microsoft YaHei','微软雅黑','SimSun','宋体',sans-serif;
+         font-size:14px; color:#000; }
+  .page { max-width:1000px; margin:0 auto; padding:52px 6px 0; }
+
+  /* ===== 居中镂空水印(屏显常驻;打印/导出PDF 每页重复,置于内容之下) ===== */
+  .watermark { position:fixed; left:0; top:0; right:0; bottom:0; display:flex;
+               align-items:center; justify-content:center; pointer-events:none;
+               z-index:-1; opacity:.30; }
+  .watermark img { width:min(135mm, 78vw); }
+
+  /* ===== 标题区(信笺式:Logo 左上,标题居中) ===== */
+  .toparea { position:relative; display:flex; align-items:center; justify-content:center;
+             min-height:72px; padding:4px 0 12px; }
+  .toparea b { font-size:20px; font-weight:bold; }
+  .hlogo { position:absolute; left:2px; top:50%; transform:translateY(-50%); height:68px; }
+
+  /* ===== 表头表格 ===== */
+  table.ftab { width:100%; border-collapse:collapse; table-layout:fixed; margin-top:4px; }
+  table.ftab td { border:1px solid #a6a6a6; padding:6px 8px; font-size:14px;
+                  vertical-align:middle; overflow-wrap:break-word; line-height:1.7; }
+  td.lbl { background:#E9F6FD; }
+  td.chk { letter-spacing:1px; }
+
+  /* 勾选组选项(可点击切换 √/□;multi 组可多选,其余单选) */
+  .opt { cursor:pointer; user-select:none; }
+  .opt:hover { color:#14719F; }
+
+  /* ===== 报告正文区(自由撰写,页数不限) ===== */
+  .report-body { border:1px solid #a6a6a6; border-top:none; padding:14px 18px 12px; }
+  .report-intro { color:#666; font-size:13px; margin:0 0 8px; }
+  .report-body p { text-indent:2em; text-align:justify; line-height:1.9; margin:0 0 4px; }
+  .report-body p.sub { font-weight:bold; margin-top:8px; }
+  .sign-block { min-height:26mm; position:relative; }
+  .sign-line { display:flex; flex-direction:column; justify-content:flex-end; align-items:flex-end; height:26mm; text-align:right; line-height:2.0; }
+  .footnote { font-size:12px; color:#000; margin:8px 2px 26px; line-height:1.7; }
+
+  /* ===== 悬浮工具条(跟随浏览器窗口;打印隐藏) ===== */
+  .btoolbar { position:fixed; top:10px; right:12px; z-index:100; text-align:right;
+              padding:6px 12px; font-size:13px; background:rgba(255,255,255,.92);
+              border:1px solid #C9E9F9; border-radius:16px; box-shadow:0 1px 6px rgba(23,145,204,.18); }
+  .btoolbar a { color:#1791CC; margin-left:16px; cursor:pointer; }
+  .btoolbar .tip { color:#888; margin-left:10px; }
+  .btoolbar .hintswitch { color:#666; cursor:pointer; }
+  .btoolbar .hintswitch input { vertical-align:-1px; margin-right:3px; }
+
+  /* ===== 填写提示层(仅屏显辅助;打印/导出PDF一律隐藏) ===== */
+  .hint { color:#8a8a8a; font-size:12px; line-height:1.65; }
+  .hint b { color:#777; font-weight:bold; }
+  details.hint { margin:4px 0 8px; }
+  details.hint summary { cursor:pointer; color:#1791CC; }
+  details.hint[open] summary { margin-bottom:2px; }
+  .hint ul { margin:2px 0 4px; padding-left:18px; }
+  .hint li { margin:1px 0; }
+  body.nohints .hint { display:none; }
+
+  /* ===== 打印 ===== */
+  @page { size:A4; margin:10mm 8mm; }
+  @media print {
+    .btoolbar, .hint, .scr { display:none !important; }
+    .page { max-width:none; padding:0; }
+    body { margin:0; }
+    tr { page-break-inside:avoid; }
+    .watermark { opacity:.30; }
+    .watermark img { width:150mm; }
+    .report-body { border-top:none; }
+  }
+</style>
+</head>
+<body>
+<div class="watermark"><img src="assets/watermark.png" alt=""></div>
+
+<div class="page">
+
+  <div class="btoolbar">
+    <label class="hintswitch"><input type="checkbox" checked onchange="document.body.classList.toggle('nohints',!this.checked)">显示填写提示</label>
+    <span class="tip">导出PDF = 打印对话框选「另存为PDF」</span>
+    <a onclick="window.print()">打印</a>
+  </div>
+
+  <div class="toparea">
+    <img class="hlogo" src="assets/logo.png" alt="成都轻工职业技术大学">
+    <b>成都轻工职业技术大学横向科研项目验收报告</b>
+  </div>
+
+  <table class="ftab">
+    <colgroup><col style="width:17%"><col style="width:33%"><col style="width:15%"><col></colgroup>
+    <tbody>
+      <tr>
+        <td class="lbl">项目编号</td><td>HX2026-001</td>
+        <td class="lbl">项目名称</td><td>某纺织企业智能化生产线改造技术服务项目</td>
+      </tr>
+      <tr>
+        <td class="lbl">是否按期完成</td><td class="chk"><span class="opt">√是</span>　<span class="opt">□否</span></td>
+        <td class="lbl">项目类型</td><td class="chk"><span class="opt">√技术开发</span>　<span class="opt">□技术咨询</span>　<span class="opt">□技术服务</span></td>
+      </tr>
+      <tr>
+        <td class="lbl">成果形式(可多选)</td>
+        <td class="chk multi" colspan="3"><span class="opt">√技术报告</span>　<span class="opt">□鉴定报告</span>　<span class="opt">√专利</span>　<span class="opt">□咨询报告</span>　<span class="opt">□其他</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="report-body">
+    <div class="report-intro">(包括项目成果内容提要、研究过程总结、项目获奖情况、成果推广计划等,页数不限。)</div>
+    <details class="hint">
+      <summary>写作大纲参考(如有图纸、图片等其它材料,插入本报告或另附亦可)</summary>
+      <ul>
+        <li><b>一、项目目标达成情况</b>:(一)技术服务内容与目标完成度;(二)项目实施节点执行情况;(三)技术标准与合规性</li>
+        <li><b>二、研究过程总结</b>:(一)项目实施流程;(二)协作机制与资源整合;(三)质量控制体系</li>
+        <li><b>三、关键工作成果</b>:(一)核心技术成果;(二)知识产权与资产;(三)创新亮点</li>
+        <li><b>四、进度与经费执行</b>:(一)进度管理;(二)经费使用情况</li>
+        <li><b>五、客户评价与效益</b>:(一)甲方评价与验收结论;(二)经济效益;(三)社会效益——行业影响、人才培养、可持续发展</li>
+        <li><b>六、总结与展望</b>:(一)项目亮点;(二)改进方向;(三)未来合作建议</li>
+        <li><b>七、结论</b></li>
+      </ul>
+    </details>
+
+    <p class="sub">一、项目目标达成情况</p>
+    <p>项目严格按照合同约定,完成某纺织企业生产线智能化改造方案设计与实施:部署传感器网络与 PLC 集控系统,接入 MES 看板,实现三层架构贯通。核心技术指标全部达标并超过预期——生产线自动化率由原 45% 提升至 88%(原计划 ≥80%),生产效率提高 30%,设备故障率降低 26%,一次性通过客户组织的现场验收。</p>
+    <p class="sub">二、研究过程总结</p>
+    <p>项目分调研、方案设计、实施、联调与培训五个阶段推进。实施流程采用"周例会+节点评审"机制,与企业设备部、生产部建立双组长协作机制,累计开展现场技术协调 16 次;质量控制上执行方案评审、进场检验、隐蔽工程确认、联调测试四道关口,各节点均按期通过。</p>
+    <p class="sub">三、关键工作成果</p>
+    <p>提交《生产线智能化改造方案》《系统联调测试报告》《操作手册》等技术文档共 5 份;申请发明专利 1 项(已受理,"一种纺织生产线多工位联动控制方法");形成可复制的产线改造实施模板一套,已在我校另外两家合作企业推广试用。</p>
+    <p class="sub">四、进度与经费执行</p>
+    <p>项目周期 2026 年 1 月至 2027 年 12 月,较合同约定提前 20 天完成验收。合同经费 355000.00 元,到账 355000.00 元,累计支出 348000.00 元,各科目均未超支,经费使用经双方确认合规。</p>
+    <p class="sub">五、客户评价与效益</p>
+    <p>委托单位评价:项目团队专业响应迅速,交付成果满足订单激增需求,改造后生产线年产能提升约 300 万元,生产成本降低 12%。改造经验为当地同类中小企业智能化转型提供了示范,项目执行期间吸纳学生 1 名全程参与,实现产学研协同育人。</p>
+    <p class="sub">六、总结与展望</p>
+    <p>本项目实现了"改造一条线、沉淀一套方法、带动一个专业"的预期目标。后续拟围绕设备预测性维护与能耗优化开展第二期合作,并将实施模板进一步完善为校级横向项目技术积累。</p>
+    <p class="sub">七、结论</p>
+    <p>项目全面完成合同约定的全部内容,成果实用有效,经费使用规范,达到验收要求,同意结题。</p>
+
+    <div class="sign-block"><div class="sign-line">项目负责人(签字):&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;年&emsp;月&emsp;日</div></div>
+  </div>
+
+  <p class="footnote">注:本报告页数不限,多页时单面打印;签名处须手写。</p>
+
+</div>
+
+<script>
+// 勾选组:点击选项切换 √/□;multi 组可多选,其余单选(打印输出当前勾选状态)
+document.querySelectorAll('.opt').forEach(function (o) {
+  o.addEventListener('click', function () {
+    var td = o.closest('td');
+    var multi = td.classList.contains('multi');
+    var on = o.textContent.charAt(0) === '√';
+    if (!multi) {
+      td.querySelectorAll('.opt').forEach(function (s) { s.textContent = '□' + s.textContent.slice(1); });
+    }
+    o.textContent = (on && multi ? '□' : '√') + o.textContent.slice(1);
+  });
+});
+</script>
+</body>
+</html>

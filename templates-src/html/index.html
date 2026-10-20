@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>横向项目审批单 · HTML 打印方案演示稿(索引)</title>
+<style>
+  body { margin:0; padding:32px 24px; background:#f2f2f2; font-family:"Microsoft YaHei","微软雅黑",sans-serif; color:#111; }
+  .wrap { max-width:880px; margin:0 auto; }
+  h1 { font-size:22px; border-left:6px solid #1791CC; padding-left:12px; }
+  .cards { display:flex; flex-wrap:wrap; gap:14px; margin:20px 0 28px; }
+  a.card { display:block; width:250px; padding:16px 18px; background:#fff; border:1px solid #d9d9d9;
+           border-radius:6px; text-decoration:none; color:#111; }
+  a.card:hover { border-color:#1791CC; box-shadow:0 2px 8px rgba(23,145,204,.18); }
+  a.card .n { font-size:13px; color:#777; }
+  a.card .t { font-size:16px; font-weight:bold; margin:4px 0 8px; }
+  a.card .d { font-size:12.5px; color:#555; line-height:1.6; }
+  h2 { font-size:17px; margin:26px 0 10px; }
+  ul, ol { font-size:14px; line-height:1.9; padding-left:22px; }
+  .note { background:#fff; border:1px solid #d9d9d9; border-radius:6px; padding:14px 18px; font-size:14px; line-height:1.9; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>横向项目审批单 · HTML 打印方案演示稿</h1>
+
+  <div class="cards">
+    <a class="card" href="hx_register.html">
+      <div class="n">附件一</div>
+      <div class="t">横向科研项目登记表</div>
+      <div class="d">项目编号/类型/合同经费(大写)/成员分工(校内校外分组)/预算科目+合计/单位与科技处意见</div>
+    </a>
+    <a class="card" href="hx_change.html">
+      <div class="n">附件2</div>
+      <div class="t">重要事项变更表</div>
+      <div class="d">变更事项勾选→变更内容自动带出原信息供对照/申请原因/三级意见栏</div>
+    </a>
+    <a class="card" href="hx_acceptance.html">
+      <div class="n">附件3(含学生版)</div>
+      <div class="t">横向科研项目验收登记表</div>
+      <div class="d">到账与使用经费/成员比例/学生参与/成果形式/科技处到账金额核定与核定人</div>
+    </a>
+    <a class="card" href="hx_report.html">
+      <div class="n">附件4</div>
+      <div class="t">横向科研项目验收报告</div>
+      <div class="d">按期完成/项目类型/成果形式(多选)/正文自由撰写页数不限/手写落款</div>
+    </a>
+  </div>
+
+  <h2>方案口径</h2>
+  <div class="note">
+    <ol>
+      <li><b>表单形态</b>:三张审批单由系统按填报数据直接生成网页版式,文字一律黑色,<b>点「打印」即出 A4 纸质审批单</b>,打印对话框中选「另存为PDF」即可导出 PDF 文件,无需安装任何办公软件。</li>
+      <li><b>附件4 验收报告同出网页版式</b>:负责人在线撰写正文,页数不限,多页单面打印,签名处手写。</li>
+      <li><b>打印时机</b>:表单提交后方可打印/导出;提交后至审批完成前仍可修改,但打印版必须为最终修改版(打印始终输出当前最新数据,系统在提交确认时提示)。</li>
+      <li><b>后台填写项</b>:立项登记日期、到账金额核定与核定人,由科技处在后台审核填写后,打印才会带出;教师送审前打印相应栏目留空。</li>
+      <li><b>填写提示</b>:表单页内的灰色小字与「示例」折叠面板仅为屏显填写辅助,<b>打印/导出PDF时自动隐藏</b>,纸质审批单版式不受影响;页面底部开关可切换提示显隐。</li>
+      <li><b>样例数据</b>:本演示稿填充的是示例数据;正式系统中由教师填报内容自动排版,成员等行数随人数增减。</li>
+    </ol>
+  </div>
+</div>
+</body>
+</html>

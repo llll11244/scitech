@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>横向科研项目登记表</title>
+<style>
+  /* ===== 风格基准:校内 OA 审批单(engine_openform 表单页);主色 rgb(62,173,229) ===== */
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { margin:0 5px; background:#fff; font-family:'Microsoft YaHei','微软雅黑','SimSun','宋体',sans-serif;
+         font-size:14px; color:#000; }
+  .page { max-width:1000px; margin:0 auto; padding:52px 6px 0; }
+
+  /* ===== 居中镂空水印(屏显常驻;打印/导出PDF 每页重复) ===== */
+  .watermark { position:fixed; left:0; top:0; right:0; bottom:0; display:flex;
+               align-items:center; justify-content:center; pointer-events:none;
+               z-index:-1; opacity:.30; }
+  .watermark img { width:min(135mm, 78vw); }
+
+  /* ===== 标题区(信笺式:Logo 左上,标题居中) ===== */
+  .toparea { position:relative; display:flex; align-items:center; justify-content:center;
+             min-height:72px; padding:4px 0 12px; }
+  .toparea b { font-size:20px; font-weight:bold; }
+  .hlogo { position:absolute; left:2px; top:50%; transform:translateY(-50%); height:68px; }
+
+  /* ===== 表单表格(linkeytable 风格) ===== */
+  table.ftab { width:100%; border-collapse:collapse; table-layout:fixed; margin-top:4px; }
+  table.ftab td { border:1px solid #a6a6a6; padding:6px 8px; font-size:14px;
+                  vertical-align:middle; overflow-wrap:break-word; line-height:1.7; }
+  td.lbl { background:#E9F6FD; }
+  td.chk { letter-spacing:1px; }
+  .subhdr td { text-align:center; background:#C9E9F9; }
+  .grp td { background:#DDF2FC; text-align:center; letter-spacing:6px; color:#000; }
+  .para { text-align:justify; }
+  .sign-block { min-height:26mm; position:relative; }
+  .sign-line { display:flex; flex-direction:column; justify-content:flex-end; align-items:flex-end; height:26mm; text-align:right; line-height:2.0; }
+  .footnote { font-size:12px; color:#000; margin:8px 2px 26px; line-height:1.7; }
+
+  /* ===== 屏显交互控件(打印/导出PDF隐藏) ===== */
+  .scr { color:#666; font-size:12px; }
+  .scr input { vertical-align:-1px; }
+  .cbx { margin-left:14px; cursor:pointer; white-space:nowrap; }
+  .bcell .amt { border:none; border-bottom:1px dashed #bbb; background:transparent;
+                font:inherit; color:inherit; width:130px; padding:0 2px; }
+  #mrate { font-weight:bold; }
+
+  /* 勾选组选项(可点击切换 √/□;multi 组可多选,其余单选) */
+  .opt { cursor:pointer; user-select:none; }
+  .opt:hover { color:#14719F; }
+
+  /* 分组竖排标签(如:项目组成员及分工) */
+  td.vlbl { writing-mode:vertical-rl; text-orientation:upright; letter-spacing:4px; padding:6px 2px; }
+
+  /* ===== 底部工具条(屏显) ===== */
+  .btoolbar { position:fixed; top:10px; right:12px; z-index:100; text-align:right;
+              padding:6px 12px; font-size:13px; background:rgba(255,255,255,.92);
+              border:1px solid #C9E9F9; border-radius:16px; box-shadow:0 1px 6px rgba(23,145,204,.18); }
+  .btoolbar a { color:#1791CC; margin-left:16px; cursor:pointer; }
+  .btoolbar .tip { color:#888; margin-left:10px; }
+  .btoolbar .hintswitch { color:#666; cursor:pointer; }
+  .btoolbar .hintswitch input { vertical-align:-1px; margin-right:3px; }
+
+  /* ===== 填写提示层(仅屏显辅助;打印/导出PDF一律隐藏) ===== */
+  .hint { color:#8a8a8a; font-size:12px; line-height:1.65; }
+  .hint b { color:#777; font-weight:bold; }
+  details.hint { margin-top:4px; }
+  details.hint summary { cursor:pointer; color:#1791CC; }
+  details.hint[open] summary { margin-bottom:2px; }
+  .hint ul { margin:2px 0 4px; padding-left:18px; }
+  .hint li { margin:1px 0; }
+  body.nohints .hint { display:none; }
+
+  /* ===== 打印 ===== */
+  @page { size:A4; margin:10mm 8mm; }
+  @media print {
+    .btoolbar, .hint, .scr { display:none !important; }
+    .page { max-width:none; padding:0; }
+    body { margin:0; }
+    tr { page-break-inside:avoid; }
+    .watermark { opacity:.30; }
+    .watermark img { width:150mm; }
+  }
+</style>
+</head>
+<body>
+<div class="watermark"><img src="assets/watermark.png" alt=""></div>
+
+<div class="page">
+
+  <div class="btoolbar">
+    <label class="hintswitch"><input type="checkbox" checked onchange="document.body.classList.toggle('nohints',!this.checked)">显示填写提示</label>
+    <span class="tip">导出PDF = 打印对话框选「另存为PDF」</span>
+    <a onclick="window.print()">打印</a>
+  </div>
+
+  <div class="toparea">
+    <img class="hlogo" src="assets/logo.png" alt="成都轻工职业技术大学">
+    <b>成都轻工职业技术大学横向科研项目登记表</b>
+  </div>
+
+  <table class="ftab">
+    <colgroup><col style="width:13%"><col style="width:10%"><col style="width:8%"><col style="width:18%"><col style="width:10%"><col style="width:9%"><col></colgroup>
+    <tbody>
+      <tr>
+        <td class="lbl">项目编号</td><td colspan="2">HX2026-001</td>
+        <td class="lbl">项目名称</td><td colspan="3">某纺织企业智能化生产线改造技术服务项目</td>
+      </tr>
+      <tr>
+        <td class="lbl">项目类型</td><td class="chk" colspan="6"><span class="opt">√技术开发</span>　　<span class="opt">□技术咨询</span>　　<span class="opt">□技术服务</span></td>
+      </tr>
+      <tr>
+        <td class="lbl">起止时间</td><td colspan="6">2026年01月至2027年12月</td>
+      </tr>
+      <tr>
+        <td class="lbl" rowspan="2">委托单位</td>
+        <td colspan="6">名称:某某纺织有限公司</td>
+      </tr>
+      <tr>
+        <td class="lbl">性质</td><td class="chk" colspan="5"><span class="opt">□政府部门</span>　<span class="opt">√企业</span>　<span class="opt">□事业单位</span>　<span class="opt">□研究机构</span>　<span class="opt">□其他</span></td>
+      </tr>
+      <tr>
+        <td class="lbl">合同经费</td>
+        <td colspan="6">人民币 355000.00 元　(大写:叁拾伍万伍仟元整)</td>
+      </tr>
+      <tr>
+        <td class="lbl">项目负责人</td><td colspan="2">张三</td>
+        <td class="lbl">所属院部</td><td colspan="3">智能制造与装备学院</td>
+      </tr>
+      <tr>
+        <td class="lbl">联系电话</td><td colspan="2">13800001111</td>
+        <td class="lbl">电子邮箱</td><td colspan="3">zhangsan@cdtc.edu.cn</td>
+      </tr>
+
+      <tr class="grp"><td class="lbl vlbl" rowspan="7">项目组成员及分工</td><td colspan="6">校内人员</td></tr>
+      <tr class="subhdr"><td>工号</td><td>姓名</td><td>所在单位</td><td>职称</td><td>专业</td><td>承担本项目的工作任务</td></tr>
+      <tr><td>20190001</td><td>张三</td><td>智能制造与装备学院</td><td>教授</td><td>机械工程</td><td>总体方案设计与技术把关</td></tr>
+      <tr><td>20190002</td><td>李四</td><td>智能制造与装备学院</td><td>讲师</td><td>自动化</td><td>控制系统开发与联调</td></tr>
+      <tr class="grp"><td colspan="6">校外人员</td></tr>
+      <tr class="subhdr"><td colspan="2">姓名</td><td>所在单位</td><td>职务</td><td>专业</td><td>承担本项目的工作任务</td></tr>
+      <tr><td colspan="2">王五</td><td>某某纺织有限公司</td><td>技术部经理</td><td>电气工程</td><td>设备选型与现场实施</td></tr>
+
+      <tr>
+        <td class="lbl">项目简介</td>
+        <td colspan="6"><div class="para" style="min-height:24mm">项目背景:某纺织企业现有生产线人工干预多、联动性差,亟需智能化改造。项目目标:完成生产线智能化改造方案设计与实施,交付技术报告与操作手册,实现自动化率提升至85%以上。技术路线:采用传感器网络+PLC 集控+MES 看板三层架构,产学研联合实施。预期成果:年产能提升约300万元,生产成本降低12%。</div>
+          <details class="hint">
+            <summary>示例:项目简介怎么写(200-300字,要求信息完整)</summary>
+            <ul>
+              <li><b>项目背景</b>:阐述甲方需求、行业现状、市场需求或企业实际问题等,说明立项必要性。</li>
+              <li><b>项目目标和内容</b>:明确技术服务具体成果,如开发技术方案、优化工艺、提供检测/咨询服务等。概括核心工作模块(技术研发、系统集成、技术咨询等),说明为甲方提供的交付物(技术报告、解决方案、专利成果等)及服务周期。</li>
+              <li><b>技术路线</b>:简要说明实现目标的技术方法、工作流程,突出专业性和可行性,提及拟采用的关键技术、合作模式(如产学研结合)或资源投入(设备、团队)。</li>
+              <li><b>预期成果</b>:总结项目对客户的价值提升,如降本增效、技术升级、资质认证通过等,辅以量化指标(效率提升百分比、成本降低幅度)增强说服力。</li>
+            </ul>
+          </details></td>
+      </tr>
+      <tr>
+        <td class="lbl">项目计划进度</td>
+        <td colspan="6"><div class="para" style="min-height:22mm">2026年01月-2026年03月:实地调研,明确改造需求,制定技术路线。2026年04月-2026年09月:方案设计,开展技术测试与评审。2026年10月-2027年09月:设备升级与系统集成,联调测试,操作培训。2027年10月-2027年12月:项目验收,提交运行报告,资料归档。</div>
+          <details class="hint">
+            <summary>示例:计划进度怎么写(200-300字)</summary>
+            <ul>
+              <li>2025年X月-2025年X月:实地调研生产线现状,与客户团队沟通明确改造需求,分析现有设备兼容性,制定初步技术路线</li>
+              <li>2025年X月-2025年X月:设计智能化改造方案,开展技术测试与方案评审</li>
+              <li>2025年X月-2025年X月:实施设备升级与系统集成,进行联调测试,优化控制逻辑,对客户团队开展操作培训</li>
+              <li>2025年X月-2025年X月:项目验收,提交运行稳定性报告,整理技术资料归档,完成项目总结</li>
+            </ul>
+          </details></td>
+      </tr>
+
+      <tr>
+        <td class="lbl" rowspan="8">经费预算(元)</td>
+        <td colspan="6" class="para">所填报的各项信息,内容完全真实有效。&emsp;&emsp;项目负责人(签字):&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;年&emsp;月&emsp;日
+          <details class="hint">
+            <summary>费用科目说明(业务费/劳务费/绩效/业务接待费/协作费)</summary>
+            <ul>
+              <li>请根据合同约定填写预算,若合同约定预算不设比例限制,则勾选本行「合同约定不受限」,打印稿该栏显示为"合同约定不受限"。</li>
+              <li><b>业务费</b>:指与项目研究相关的直接支出,包括但不限于:设备费、材料费、测试化验加工费、燃料动力费、差旅费、会议费、国际合作与交流费、出版/文献/信息传播/知识产权事务费、研发过程产生的废弃物无害化处理费等。应根据项目开展需要合理预算和据实列支,不设比例限制。</li>
+              <li><b>劳务费</b>:指非校内在编人员的劳务、咨询、评审、验收、鉴定等开支费用。(校内人员的费用属于绩效)</li>
+              <li><b>绩效</b>:主要用于奖励项目研究团队,在确保能履行完成合同约定的条件下编制,由项目负责人根据科研人员在项目工作中的实际贡献,自主综合确定科研人员的绩效金额。绩效支出比例注意查看《横向科研项目及经费管理办法》。</li>
+              <li><b>业务接待费</b>:指项目执行过程中发生的接待费等。<b>协作费</b>:应在合同中明确约定。具体详见《横向科研项目及经费管理办法》。</li>
+            </ul>
+          </details></td>
+      </tr>
+      <tr><td>业务费</td><td colspan="5" class="bcell"><input class="amt" value="80000.00"><span class="unl" hidden>合同约定不受限</span><label class="scr cbx"><input type="checkbox">合同约定不受限</label></td></tr>
+      <tr><td>劳务费</td><td colspan="5" class="bcell"><input class="amt" value="60000.00"><span class="unl" hidden>合同约定不受限</span><label class="scr cbx"><input type="checkbox">合同约定不受限</label></td></tr>
+      <tr><td>绩效</td><td colspan="5" class="bcell"><input class="amt" value="150000.00"><span class="unl" hidden>合同约定不受限</span><label class="scr cbx"><input type="checkbox">合同约定不受限</label></td></tr>
+      <tr><td>业务接待费</td><td colspan="5" class="bcell"><input class="amt" value="5000.00"><span class="unl" hidden>合同约定不受限</span><label class="scr cbx"><input type="checkbox">合同约定不受限</label></td></tr>
+      <tr><td>协作费</td><td colspan="5" class="bcell"><input class="amt" value="40000.00"><span class="unl" hidden>合同约定不受限</span><label class="scr cbx"><input type="checkbox">合同约定不受限</label></td></tr>
+      <tr><td>其它</td><td colspan="5" class="bcell"><input class="amt" value="20000.00"><span class="unl" hidden>合同约定不受限</span><label class="scr cbx"><input type="checkbox">合同约定不受限</label></td></tr>
+      <tr style="font-weight:bold"><td>预算合计</td><td colspan="5"><span id="btotal">355000.00</span></td></tr>
+
+      <tr>
+        <td class="lbl">设备场地</td>
+        <td class="chk" colspan="6">项目是否以使用学校仪器设备和场地为主:<span class="opt">√是</span>　　<span class="opt">□否</span></td>
+      </tr>
+      <tr>
+        <td class="chk" colspan="3">是否收取管理费:<span class="opt">√是</span>　<span class="opt">□否</span></td>
+        <td colspan="4">收取管理费金额:<span id="mfee">7100.00</span> 元
+          <span class="scr">(比例换算:<span id="mrate">2</span> % × 合同经费 355000.00,自动计算;比例由科技处在系统参数中统一设定)</span>
+          <div class="hint">是否收取管理费,请根据审批流程如实填写;比例由科技处统一设定,教师不可修改,金额=合同经费×比例自动换算。</div></td>
+      </tr>
+
+      <tr>
+        <td class="lbl">项目所在单位负责人意见</td>
+        <td colspan="6" class="sign-block"><div class="sign-line">(签字):&emsp;&emsp;&emsp;(盖章)<br>年&emsp;月&emsp;日</div></td>
+      </tr>
+      <tr>
+        <td class="lbl">科技处意见</td>
+        <td colspan="4" class="sign-block"><div class="sign-line">签字:&emsp;&emsp;&emsp;(盖章)</div></td>
+        <td colspan="2">立项登记日期:&emsp;&emsp;&emsp;&emsp;<br>&emsp;&emsp;年&emsp;月&emsp;日</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p class="footnote">注:本表一式四份:科技处一份,计财处一份,所在单位一份,项目负责人一份,双面打印,控制在两页内。</p>
+
+</div>
+
+<script>
+// 经费预算:勾选「合同约定不受限」→ 本行金额不可设置,原位显示口径文字(打印输出该文字)
+document.querySelectorAll('.cbx input[type=checkbox]').forEach(function (cb) {
+  cb.addEventListener('change', function () {
+    var td = cb.closest('td');
+    td.querySelector('.amt').hidden = cb.checked;
+    td.querySelector('.unl').hidden = !cb.checked;
+    calcBudget();
+  });
+});
+// 预算合计:各科目金额实时求和(勾选「合同约定不受限」的行不计入)
+function calcBudget() {
+  var sum = 0;
+  document.querySelectorAll('.amt').forEach(function (a) {
+    var cb = a.closest('td').querySelector('.cbx input[type=checkbox]');
+    if (!cb || !cb.checked) sum += parseFloat(a.value) || 0;
+  });
+  document.getElementById('btotal').textContent = sum.toFixed(2);
+}
+document.querySelectorAll('.amt').forEach(function (a) { a.addEventListener('input', calcBudget); });
+calcBudget();
+// 收取管理费:比例换算(2% × 合同经费 355000)——比例由科技处统一设定(只读展示,教师不可改)
+var MRATE = parseFloat(document.getElementById('mrate').textContent) || 2;
+function calcMfee() {
+  document.getElementById('mfee').textContent = (355000 * MRATE / 100).toFixed(2);
+}
+calcMfee();
+
+// 勾选组:点击选项切换 √/□;multi 组可多选,其余单选(打印输出当前勾选状态)
+document.querySelectorAll('.opt').forEach(function (o) {
+  o.addEventListener('click', function () {
+    var td = o.closest('td');
+    var multi = td.classList.contains('multi');
+    var on = o.textContent.charAt(0) === '√';
+    if (!multi) {
+      td.querySelectorAll('.opt').forEach(function (s) { s.textContent = '□' + s.textContent.slice(1); });
+    }
+    o.textContent = (on && multi ? '□' : '√') + o.textContent.slice(1);
+  });
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>横向科研项目验收登记表</title>
+<style>
+  /* ===== 风格基准:校内 OA 审批单(engine_openform 表单页) ===== */
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { margin:0 5px; background:#fff; font-family:'Microsoft YaHei','微软雅黑','SimSun','宋体',sans-serif;
+         font-size:14px; color:#000; }
+  .page { max-width:1000px; margin:0 auto; padding:52px 6px 0; }
+
+  /* ===== 居中镂空水印(屏显常驻;打印/导出PDF 每页重复) ===== */
+  .watermark { position:fixed; left:0; top:0; right:0; bottom:0; display:flex;
+               align-items:center; justify-content:center; pointer-events:none;
+               z-index:-1; opacity:.30; }
+  .watermark img { width:min(135mm, 78vw); }
+
+  /* ===== 标题区(信笺式:Logo 左上,标题居中) ===== */
+  .toparea { position:relative; display:flex; align-items:center; justify-content:center;
+             min-height:72px; padding:4px 0 12px; }
+  .toparea b { font-size:20px; font-weight:bold; }
+  .hlogo { position:absolute; left:2px; top:50%; transform:translateY(-50%); height:68px; }
+
+  /* ===== 表单表格(linkeytable 风格;主色 rgb(62,173,229)) ===== */
+  table.ftab { width:100%; border-collapse:collapse; table-layout:fixed; margin-top:4px; }
+  table.ftab td { border:1px solid #a6a6a6; padding:6px 8px; font-size:14px;
+                  vertical-align:middle; overflow-wrap:break-word; line-height:1.7; }
+  td.lbl { background:#E9F6FD; }
+  td.chk { letter-spacing:1px; }
+  .subhdr td { text-align:center; background:#C9E9F9; }
+  .grp td { background:#DDF2FC; text-align:center; letter-spacing:6px; color:#000; }
+  .para { text-align:justify; }
+  .sign-block { min-height:26mm; position:relative; }
+  .sign-line { display:flex; flex-direction:column; justify-content:flex-end; align-items:flex-end; height:26mm; text-align:right; line-height:2.0; }
+  .inline-sign { text-align:right; line-height:2.0; margin-top:10px; }
+  .footnote { font-size:12px; color:#000; margin:8px 2px 26px; line-height:1.7; }
+
+  /* 勾选组选项(可点击切换 √/□;multi 组可多选,其余单选) */
+  .opt { cursor:pointer; user-select:none; }
+  .opt:hover { color:#14719F; }
+
+  /* ===== 底部工具条(屏显) ===== */
+  .btoolbar { position:fixed; top:10px; right:12px; z-index:100; text-align:right;
+              padding:6px 12px; font-size:13px; background:rgba(255,255,255,.92);
+              border:1px solid #C9E9F9; border-radius:16px; box-shadow:0 1px 6px rgba(23,145,204,.18); }
+  .btoolbar a { color:#1791CC; margin-left:16px; cursor:pointer; }
+  .btoolbar .tip { color:#888; margin-left:10px; }
+  .btoolbar .hintswitch { color:#666; cursor:pointer; }
+  .btoolbar .hintswitch input { vertical-align:-1px; margin-right:3px; }
+
+  /* ===== 填写提示层(仅屏显辅助;打印/导出PDF一律隐藏) ===== */
+  .hint { color:#8a8a8a; font-size:12px; line-height:1.65; }
+  .hint b { color:#777; font-weight:bold; }
+  details.hint { margin-top:4px; }
+  details.hint summary { cursor:pointer; color:#1791CC; }
+  details.hint[open] summary { margin-bottom:2px; }
+  .hint ul { margin:2px 0 4px; padding-left:18px; }
+  .hint li { margin:1px 0; }
+  body.nohints .hint { display:none; }
+
+  /* ===== 打印 ===== */
+  @page { size:A4; margin:10mm 8mm; }
+  @media print {
+    .btoolbar, .hint, .scr { display:none !important; }
+    .page { max-width:none; padding:0; }
+    body { margin:0; }
+    tr { page-break-inside:avoid; }
+    .watermark { opacity:.30; }
+    .watermark img { width:150mm; }
+  }
+</style>
+</head>
+<body>
+<div class="watermark"><img src="assets/watermark.png" alt=""></div>
+
+<div class="page">
+
+  <div class="btoolbar">
+    <label class="hintswitch"><input type="checkbox" checked onchange="document.body.classList.toggle('nohints',!this.checked)">显示填写提示</label>
+    <span class="tip">导出PDF = 打印对话框选「另存为PDF」</span>
+    <a onclick="window.print()">打印</a>
+  </div>
+
+  <div class="toparea">
+    <img class="hlogo" src="assets/logo.png" alt="成都轻工职业技术大学">
+    <b>成都轻工职业技术大学横向科研项目验收登记表</b>
+  </div>
+
+  <table class="ftab">
+    <colgroup><col style="width:17%"><col style="width:22%"><col style="width:14%"><col style="width:16%"><col style="width:13%"><col></colgroup>
+    <tbody>
+      <tr>
+        <td class="lbl">项目编号</td><td>HX2026-001</td>
+        <td class="lbl">项目名称</td><td colspan="3">某纺织企业智能化生产线改造技术服务项目</td>
+      </tr>
+      <tr>
+        <td class="lbl">项目类型</td><td class="chk" colspan="5"><span class="opt">√技术开发</span>　　<span class="opt">□技术咨询</span>　　<span class="opt">□技术服务</span></td>
+      </tr>
+      <tr>
+        <td class="lbl">起止时间</td><td colspan="5">2026年01月至2027年12月</td>
+      </tr>
+      <tr>
+        <td class="lbl" rowspan="2">委托单位</td>
+        <td class="lbl">名称</td><td colspan="4">某某纺织有限公司</td>
+      </tr>
+      <tr>
+        <td class="lbl">性质</td><td class="chk" colspan="4"><span class="opt">□政府部门</span>　<span class="opt">√企业</span>　<span class="opt">□事业单位</span>　<span class="opt">□研究机构</span>　<span class="opt">□其他</span></td>
+      </tr>
+      <tr>
+        <td class="lbl">到账经费(万元)</td><td>35.50</td>
+        <td class="lbl">使用经费(万元)</td><td colspan="3">34.80</td>
+      </tr>
+      <tr>
+        <td class="lbl">项目负责人</td><td>张三</td>
+        <td class="lbl">所在院部</td><td colspan="3">智能制造与装备学院</td>
+      </tr>
+
+      <tr class="subhdr">
+        <td class="lbl" rowspan="6">项目完成情况</td>
+        <td>姓名</td><td>所在院部</td><td>职称</td><td>学科专业</td><td>承担本项目的工作任务比例(%及金额)<div class="hint">需明确百分比和金额,请自行增减行,单位万元。</div></td>
+      </tr>
+      <tr class="grp"><td colspan="5">校内人员</td></tr>
+      <tr><td>张三</td><td>智能制造与装备学院</td><td>教授</td><td>机械工程</td><td>40%(14.2万元)</td></tr>
+      <tr><td>李四</td><td>智能制造与装备学院</td><td>讲师</td><td>自动化</td><td>40%(14.2万元)</td></tr>
+      <tr class="grp"><td colspan="5">校外人员</td></tr>
+      <tr><td>王五</td><td>某某纺织有限公司</td><td>高级工程师</td><td>电气工程</td><td>20%(7.1万元)</td></tr>
+
+      <tr class="subhdr">
+        <td class="lbl" rowspan="2">学生参与情况<div class="hint">尽可能让学生参与工作,紧扣立德树人根本任务,请自行增减行。</div></td>
+        <td>学生姓名</td><td>学号</td><td>专业</td><td>指导老师</td><td>参与的工作任务<div class="hint">指具体参与什么工作。</div></td>
+      </tr>
+      <tr><td>赵同学</td><td>2023011234</td><td>机电一体化</td><td>张三</td><td>传感器数据采集程序开发</td></tr>
+
+      <tr>
+        <td class="lbl">完成时间</td><td colspan="5">2027年12月20日</td>
+      </tr>
+      <tr>
+        <td class="lbl">成果形式</td>
+        <td class="chk multi" colspan="5"><span class="opt">√技术报告</span>　<span class="opt">□鉴定报告</span>　<span class="opt">√专利</span>　<span class="opt">□咨询报告</span>　<span class="opt">□其他</span></td>
+      </tr>
+      <tr>
+        <td class="lbl">项目完成情况总结</td>
+        <td colspan="5">
+          <div class="para" style="min-height:28mm">目标达成情况:完成全部改造内容,自动化率由原45%提升至88%,生产效率提高30%。关键成果:提交技术文档5份,受理发明专利1项。经费执行:各科目无超支。客户评价:验收合格,表达后续合作意向。</div>
+          <details class="hint">
+            <summary>示例:完成情况总结怎么写</summary>
+            <ul>
+              <li><b>目标达成情况</b>:项目严格按照合同约定,完成生产线智能化改造方案设计与实施,实现核心技术指标:生产线自动化率从原XX%提升至XX%,生产效率提高XX%,设备故障率降低XX%,均超过预期目标(原计划自动化率≥XX%、效率提升≥XX%)。通过部署传感器网络与智能控制系统,成功解决客户设备联动性差、人工干预频繁的痛点。</li>
+              <li><b>关键工作成果</b>:提交《生产线智能化改造方案》《系统联调测试报告》《操作手册》等技术文档共XX份,完成改造后生产线验收并交付使用。</li>
+              <li><b>培训与支持</b>:为客户团队开展操作培训X场,覆盖XX人次,提供X个月试运行技术支持,确保系统稳定运行。</li>
+              <li><b>进度与经费执行</b>:项目周期从XXXX年XX月至XXXX年XX月,较原计划提前XX天完成验收,主要得益于需求调研阶段的高效沟通与技术方案一次性通过评审。经费使用严格遵循预算,设备费、开发费等科目无超支,调剂合理性经双方确认。</li>
+              <li><b>客户评价与效益</b>:改造后生产线满足订单激增需求,年产能提升约XXXX万元,生产成本降低XX%,并通过ISO 9001质量管理体系认证。客户对技术方案的专业性与团队响应速度给予高度评价,表达了后续合作意向。</li>
+              <li>项目全面完成合同约定任务,技术成果实用有效,实现了客户降本增效目标,为同类生产线改造提供了可复制的技术模板。</li>
+            </ul>
+          </details>
+          <div class="inline-sign">项目负责人(签字)&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;年&emsp;月&emsp;日</div>
+        </td>
+      </tr>
+
+      <tr>
+        <td class="lbl">项目负责人所在单位意见</td>
+        <td colspan="5" class="sign-block"><div class="hint">参考措辞(纸面留白手写):情况属实,同意验收。</div><div class="sign-line">负责人(签字):&emsp;&emsp;&emsp;(盖章)<br>年&emsp;月&emsp;日</div></td>
+      </tr>
+      <tr>
+        <td class="lbl">委托单位对项目完成情况的评价意见,是否验收合格。</td>
+        <td colspan="5" class="sign-block"><div class="hint">参考措辞(纸面留白手写):项目团队已于合同约定期内提交全部成果,所有项目资料经由我单位核查无误,资金使用规范合理,验收合格。</div><div class="sign-line">委托单位(盖章)<br>年&emsp;月&emsp;日</div></td>
+      </tr>
+
+      <tr>
+        <td class="lbl" rowspan="2">科技处意见</td>
+        <td>到账金额核定(万元)</td>
+        <td colspan="2">35.50</td>
+        <td colspan="2">核定人签字:&emsp;&emsp;&emsp;&emsp;核定人:赵六</td>
+      </tr>
+      <tr>
+        <td colspan="5" class="sign-block"><div class="sign-line">负责人(签字)&emsp;&emsp;&emsp;&emsp;&emsp;(盖章)&emsp;&emsp;&emsp;&emsp;&emsp;年&emsp;月&emsp;日</div></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p class="footnote">本表一式四份:委托单位一份,科技处一份,所在单位一份,项目负责人一份,双面打印,控制在两页内。</p>
+
+</div>
+
+<script>
+// 勾选组:点击选项切换 √/□;multi 组可多选,其余单选(打印输出当前勾选状态)
+document.querySelectorAll('.opt').forEach(function (o) {
+  o.addEventListener('click', function () {
+    var td = o.closest('td');
+    var multi = td.classList.contains('multi');
+    var on = o.textContent.charAt(0) === '√';
+    if (!multi) {
+      td.querySelectorAll('.opt').forEach(function (s) { s.textContent = '□' + s.textContent.slice(1); });
+    }
+    o.textContent = (on && multi ? '□' : '√') + o.textContent.slice(1);
+  });
+});
+</script>
+</body>
+</html>
