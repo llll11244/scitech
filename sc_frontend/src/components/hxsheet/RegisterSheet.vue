@@ -78,9 +78,9 @@
             </td>
           </tr>
 
-          <!-- ===== B 项目组成员及分工(校内/校外两段,可增删行) ===== -->
+          <!-- ===== B 项目组成员及分工(校内/校外两段,可增删行;rowspan 随行数动态) ===== -->
           <tr>
-            <td class="lbl vlbl" rowspan="7">项目组成员及分工</td>
+            <td class="lbl vlbl" :rowspan="4 + innerMembers.length + outerMembers.length + (mode === 'edit' ? 2 : 0)">项目组成员及分工</td>
             <td class="grp" colspan="6">校内人员</td>
           </tr>
           <tr class="subhdr">
@@ -102,7 +102,7 @@
               <template v-else>{{ m.duty }}</template>
               <a v-if="mode === 'edit'" class="scr rowbtn" @click="removeRow('in', i)">✕</a></td>
           </tr>
-          <tr v-if="mode === 'edit'"><td colspan="6"><a class="scr rowbtn" @click="addInner()">+ 添加校内人员</a></td></tr>
+          <tr v-if="mode === 'edit'" class="addrow"><td colspan="6"><a class="scr rowbtn" @click="addInner()">+ 添加校内人员</a></td></tr>
           <tr>
             <td class="grp" colspan="6">校外人员</td>
           </tr>
@@ -122,7 +122,7 @@
               <template v-else>{{ m.duty }}</template>
               <a v-if="mode === 'edit'" class="scr rowbtn" @click="removeRow('out', i)">✕</a></td>
           </tr>
-          <tr v-if="mode === 'edit'"><td colspan="6"><a class="scr rowbtn" @click="addOuter()">+ 添加校外人员</a></td></tr>
+          <tr v-if="mode === 'edit'" class="addrow"><td colspan="6"><a class="scr rowbtn" @click="addOuter()">+ 添加校外人员</a></td></tr>
 
           <!-- ===== C/D 简介/进度 ===== -->
           <tr>
@@ -285,8 +285,8 @@ const deptName = computed(() => {
 })
 
 /* 成员两段视图:校内(教师)/校外(校外人员);行操作后 touch 通知父级防抖保存/预览 */
-const innerMembers = computed(() => props.model.members.filter((m) => m.memberType !== '校外人员'))
-const outerMembers = computed(() => props.model.members.filter((m) => m.memberType === '校外人员'))
+const innerMembers = computed(() => (props.model.members || []).filter((m) => m.memberType !== '校外人员'))
+const outerMembers = computed(() => (props.model.members || []).filter((m) => m.memberType === '校外人员'))
 
 function addInner() {
   props.model.members.push({ memberType: '教师', employeeNo: '', name: '', unit: '', title: '', major: '', duty: '' })

@@ -44,9 +44,9 @@
             <td class="lbl">所在院部</td><td colspan="3">{{ meta.orig.deptName }}</td>
           </tr>
 
-          <!-- ===== B 项目完成情况(成员比例表,统一 5 列,校内/校外分组可增删) ===== -->
+          <!-- ===== B 项目完成情况(成员比例表,统一 5 列,校内/校外分组可增删;rowspan 含合计行) ===== -->
           <tr>
-            <td class="lbl" :rowspan="3 + innerMembers.length + outerMembers.length">项目完成情况</td>
+            <td class="lbl" :rowspan="4 + innerMembers.length + outerMembers.length + (mode === 'edit' ? 2 : 0)">项目完成情况</td>
             <td class="subhdr">姓名</td><td class="subhdr">所在院部</td><td class="subhdr">职称</td>
             <td class="subhdr">学科专业</td><td class="subhdr">承担本项目的工作任务比例(%及金额)
               <div class="hint">需明确百分比和金额,单位万元。</div></td>
@@ -71,7 +71,7 @@
               <template v-else>{{ ratioText(m) }}</template>
             </td>
           </tr>
-          <tr v-if="mode === 'edit'"><td colspan="5"><a class="scr rowbtn" @click="addMember('in')">+ 添加校内人员</a></td></tr>
+          <tr v-if="mode === 'edit'" class="addrow"><td colspan="5"><a class="scr rowbtn" @click="addMember('in')">+ 添加校内人员</a></td></tr>
           <tr><td class="grp" colspan="5">校外人员</td></tr>
           <tr v-for="(m, i) in outerMembers" :key="'out' + i">
             <td><input v-if="mode === 'edit'" v-model.trim="m.name" class="cellinput" maxlength="64" placeholder="姓名">
@@ -92,7 +92,7 @@
               <template v-else>{{ ratioText(m) }}</template>
             </td>
           </tr>
-          <tr v-if="mode === 'edit'"><td colspan="5"><a class="scr rowbtn" @click="addMember('out')">+ 添加校外人员</a></td></tr>
+          <tr v-if="mode === 'edit'" class="addrow"><td colspan="5"><a class="scr rowbtn" @click="addMember('out')">+ 添加校外人员</a></td></tr>
           <tr style="font-weight:bold">
             <td>合计</td><td colspan="4" class="num">比例:{{ ratioSum.toFixed(2) }}%　金额:{{ money(amountSum) }} 元({{ toWan(amountSum) }} 万元)
               <span v-if="mode === 'edit' && (ratioSum !== 100 || amountSum !== Number(meta.receivedTotal))"
@@ -100,9 +100,9 @@
             </td>
           </tr>
 
-          <!-- ===== C 学生参与情况 ===== -->
+          <!-- ===== C 学生参与情况(rowspan 随学生数动态) ===== -->
           <tr>
-            <td class="lbl" :rowspan="2 + model.students.length">学生参与情况
+            <td class="lbl" :rowspan="1 + model.students.length + (mode === 'edit' ? 1 : 0)">学生参与情况
               <div class="hint">尽可能让学生参与工作,紧扣立德树人根本任务。</div></td>
             <td class="subhdr">学生姓名</td><td class="subhdr">学号</td><td class="subhdr">专业</td>
             <td class="subhdr">指导老师</td><td class="subhdr">参与的工作任务
@@ -121,7 +121,7 @@
               <template v-else>{{ s.duty }}</template>
               <a v-if="mode === 'edit'" class="scr rowbtn" @click="model.students.splice(i, 1); touch()">✕</a></td>
           </tr>
-          <tr v-if="mode === 'edit'"><td colspan="5"><a class="scr rowbtn" @click="addStudent">+ 添加学生</a></td></tr>
+          <tr v-if="mode === 'edit'" class="addrow"><td colspan="5"><a class="scr rowbtn" @click="addStudent">+ 添加学生</a></td></tr>
 
           <tr>
             <td class="lbl">完成时间</td>
@@ -217,10 +217,10 @@ const cnDateFull = (s) => {
   return `${y}年${Number(m)}月${Number(d)}日`
 }
 
-const innerMembers = computed(() => props.model.members.filter((m) => m.memberType !== '校外人员'))
-const outerMembers = computed(() => props.model.members.filter((m) => m.memberType === '校外人员'))
-const ratioSum = computed(() => props.model.members.reduce((s, m) => s + (Number(m.ratio) || 0), 0))
-const amountSum = computed(() => props.model.members.reduce((s, m) => s + (Number(m.amount) || 0), 0))
+const innerMembers = computed(() => (props.model.members || []).filter((m) => m.memberType !== '校外人员'))
+const outerMembers = computed(() => (props.model.members || []).filter((m) => m.memberType === '校外人员'))
+const ratioSum = computed(() => (props.model.members || []).reduce((s, m) => s + (Number(m.ratio) || 0), 0))
+const amountSum = computed(() => (props.model.members || []).reduce((s, m) => s + (Number(m.amount) || 0), 0))
 
 function ratioText(m) {
   const r = m.ratio === null || m.ratio === undefined ? '' : String(Number(m.ratio))

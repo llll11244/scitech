@@ -54,17 +54,18 @@
               </div>
             </template>
             <div class="preview-box" :class="{ editing: editMode }">
-              <template v-if="d.flow.flowType === 'register'">
+              <template v-if="sheetReady && d.flow.flowType === 'register'">
                 <RegisterSheet :model="model" :mode="editMode ? 'edit' : 'print'" :meta="meta" />
               </template>
-              <template v-else-if="d.flow.flowType === 'change'">
+              <template v-else-if="sheetReady && d.flow.flowType === 'change'">
                 <ChangeSheet :model="model" :mode="editMode ? 'edit' : 'print'" :meta="meta" />
               </template>
-              <template v-else>
+              <template v-else-if="sheetReady">
                 <AcceptanceSheet v-if="curDoc !== 'hx_report'" :model="model"
                   :mode="editMode ? 'edit' : 'print'" :meta="meta" />
                 <ReportSheet v-else :model="model" :mode="editMode ? 'edit' : 'print'" :meta="meta" />
               </template>
+              <el-empty v-else description="单据加载中" :image-size="70" />
             </div>
           </el-card>
         </el-col>
@@ -226,6 +227,7 @@ const router = useRouter()
 
 const loading = ref(false)
 const d = ref(null)
+const sheetReady = ref(false)   // model/meta 就绪守卫:d 赋值即触发重渲染,空 model 会让 Sheet 渲染崩
 const curDoc = ref('hx_acceptance')
 const editMode = ref(false)
 const savingEdit = ref(false)
@@ -312,6 +314,7 @@ const fmtTime = (t) => (t || '').replace('T', ' ').slice(0, 16)
 
 async function load() {
   loading.value = true
+  sheetReady.value = false
   try {
     d.value = await flowDetail(flowId.value)
     const built = await buildSheetModel(d.value, d.value.flow.flowType)
@@ -323,6 +326,10 @@ async function load() {
     if (![1, 2].includes(d.value.flow.status)) {
       editMode.value = false
     }
+    sheetReady.value = true
+  } catch (e) {
+    console.error('[AuditDetail] 加载失败', e)
+    ElMessage.error('单据加载失败:' + (e && e.message ? e.message : '请看控制台'))
   } finally {
     loading.value = false
   }

@@ -97,6 +97,14 @@ html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .page { max-width: none; padding: 0; }
   body { margin: 0; background: #fff; }
   tr { page-break-inside: avoid; }
-  .watermark { opacity: .30; }
-  .watermark img { width: 150mm; }
+  /* 添加行按钮行只屏显,打印不留空行(R1) */
+  tr.addrow { display: none !important; }
+  /* 水印(R2):position:fixed 在 Chrome 打印只在末页渲染一次——改用根元素背景=画布背景,
+     CSS 分页规范每页绘制(居中 150mm,print-color-adjust:exact 已强制无视「背景图形」开关);
+     屏显 fixed 水印不进打印 */
+  .watermark { display: none !important; }
+  html { background: url(/sheet-assets/watermark.png) center center / 150mm auto no-repeat; }
+  /* 编辑页兜底:直接 Ctrl+P 时隐藏应用外壳(侧边栏/顶栏),输出与打印页同版式 */
+  .layout .aside, .layout .header { display: none !important; }
+  .layout .el-main { padding: 0 !important; }
 }

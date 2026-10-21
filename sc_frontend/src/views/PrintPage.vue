@@ -2,7 +2,7 @@
   <div v-if="ready" class="print-root">
     <div class="btoolbar print-bar">
       <a @click="print">打印 / 另存为 PDF</a>
-      <span class="tip">打印对话框:目标=另存为 PDF,布局=纵向,A4</span>
+      <span class="tip">对话框:目标=另存为 PDF,布局=纵向,A4;若水印未输出请勾选「背景图形」</span>
     </div>
 
     <RegisterSheet v-if="flowType === 'register'" :model="model" mode="print"

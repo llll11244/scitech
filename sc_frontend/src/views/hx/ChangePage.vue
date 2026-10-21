@@ -5,12 +5,11 @@
 
     <div class="btoolbar">
       <label class="hintswitch"><input type="checkbox" v-model="showHints">显示填写提示</label>
-      <span class="tip">打印=对话框选「另存为PDF」导出</span>
-      <a v-if="flowStatus >= 1" @click="print">打印</a>
       <template v-if="canEdit">
-        <a class="tbtn" @click="save">{{ saving ? '保存中…' : '保存草稿' }}</a>
+        <a class="tbtn" :style="saving ? 'opacity:.5' : ''" @click="save">{{ saving ? '保存中…' : '保存草稿' }}</a>
         <a class="tbtn" @click="submit">{{ rejected ? '保存并重交' : '提交' }}</a>
       </template>
+      <a v-if="flowStatus >= 1" @click="print">打印 / 导出 PDF</a>
     </div>
 
     <!-- 项目选择(屏显操作条;选定后 A 区实态只读) -->
@@ -24,12 +23,6 @@
 
     <ChangeSheet v-if="meta.orig.name || form.flowId" :model="form" :mode="mode"
       :show-hints="showHints" :meta="meta" @change="onChange" />
-
-    <div v-if="canEdit && (meta.orig.name || form.flowId)" class="pageops">
-      <el-button type="primary" :loading="saving" @click="save">保存草稿</el-button>
-      <el-button type="success" :loading="submitting" @click="submit">{{ rejected ? '保存并重交' : '提交' }}</el-button>
-      <el-button v-if="flowStatus >= 1" @click="print">打印</el-button>
-    </div>
   </div>
 </template>
 
@@ -40,7 +33,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { flowDetail, listDict, myProjects, resubmit, saveChangeDraft, submitChange } from '../../api/hx'
 import ChangeSheet from '../../components/hxsheet/ChangeSheet.vue'
 
@@ -120,6 +113,16 @@ async function submit() {
   }
   if (has('项目负责人') && !form.newLeaderId) {
     ElMessage.warning('勾选「项目负责人」须选择变更后负责人')
+    return
+  }
+  /* 提交确认(HTML转正口径) */
+  const tip = rejected.value
+    ? '重交后原盖章件作废,需重新盖章回扫。'
+    : '提交后仍可修改,但打印版必须为最终修改版。'
+  try {
+    await ElMessageBox.confirm(tip + '请确认当前填报数据无误。', '确认提交',
+      { confirmButtonText: '确认提交', cancelButtonText: '再检查一下', type: 'info' })
+  } catch (e) {
     return
   }
   submitting.value = true
@@ -212,10 +215,5 @@ onMounted(async () => {
   align-items: center;
   gap: 8px;
   font-size: 14px;
-}
-.pageops {
-  margin: 14px 4px 40px;
-  display: flex;
-  gap: 10px;
 }
 </style>

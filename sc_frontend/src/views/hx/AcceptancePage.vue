@@ -7,12 +7,12 @@
 
     <div class="btoolbar">
       <label class="hintswitch"><input type="checkbox" v-model="showHints">显示填写提示</label>
-      <span class="tip">打印=对话框选「另存为PDF」导出</span>
-      <a v-if="flowStatus >= 1" @click="print(activeTab)">打印</a>
       <template v-if="canEdit">
-        <a class="tbtn" @click="save">{{ saving ? '保存中…' : '保存草稿' }}</a>
+        <a class="tbtn" :style="saving ? 'opacity:.5' : ''" @click="save">{{ saving ? '保存中…' : '保存草稿' }}</a>
         <a class="tbtn" @click="submit">{{ rejected ? '保存并重交' : '提交' }}</a>
       </template>
+      <a v-if="flowStatus >= 1" @click="print('hx_acceptance')">打印验收登记表</a>
+      <a v-if="flowStatus >= 1" @click="print('hx_report')">打印验收报告</a>
     </div>
 
     <div v-if="mode === 'edit' && !form.flowId" class="pick">
@@ -32,13 +32,6 @@
           <ReportSheet :model="form" :mode="mode" :show-hints="showHints" :meta="meta" @change="onChange" />
         </el-tab-pane>
       </el-tabs>
-
-      <div v-if="canEdit" class="pageops">
-        <el-button type="primary" :loading="saving" @click="save">保存草稿</el-button>
-        <el-button type="success" :loading="submitting" @click="submit">{{ rejected ? '保存并重交' : '提交' }}</el-button>
-        <el-button v-if="flowStatus >= 1" @click="print('hx_acceptance')">打印验收登记表</el-button>
-        <el-button v-if="flowStatus >= 1" @click="print('hx_report')">打印验收报告</el-button>
-      </div>
     </template>
   </div>
 </template>
@@ -51,7 +44,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { flowDetail, listDict, myProjects, resubmit, saveAcceptanceDraft, submitAcceptance } from '../../api/hx'
 import AcceptanceSheet from '../../components/hxsheet/AcceptanceSheet.vue'
 import ReportSheet from '../../components/hxsheet/ReportSheet.vue'
@@ -153,6 +146,16 @@ async function submit() {
   }
   if (Math.abs(amountSum - total) > 0.005) {
     ElMessage.warning(`成员金额合计(${amountSum.toFixed(2)})须等于到账经费(${total})元`)
+    return
+  }
+  /* 提交确认(HTML转正口径) */
+  const tip = rejected.value
+    ? '重交后原盖章件作废,需重新盖章回扫。'
+    : '提交后仍可修改,但打印版必须为最终修改版。'
+  try {
+    await ElMessageBox.confirm(tip + '请确认当前填报数据无误。', '确认提交',
+      { confirmButtonText: '确认提交', cancelButtonText: '再检查一下', type: 'info' })
+  } catch (e) {
     return
   }
   submitting.value = true
@@ -286,10 +289,5 @@ onMounted(async () => {
   align-items: center;
   gap: 8px;
   font-size: 14px;
-}
-.pageops {
-  margin: 14px 4px 40px;
-  display: flex;
-  gap: 10px;
 }
 </style>

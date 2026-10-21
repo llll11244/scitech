@@ -7,27 +7,18 @@
 
     <div class="btoolbar">
       <label class="hintswitch"><input type="checkbox" v-model="showHints">显示填写提示</label>
-      <span class="tip">打印=对话框选「另存为PDF」导出</span>
-      <a v-if="flowStatus >= 1" @click="print">打印</a>
       <template v-if="canEdit">
+        <el-upload :show-file-list="false" :http-request="doUploadContract" :accept="'.pdf,.png,.jpg,.jpeg'">
+          <a class="tbtn">{{ contractFile ? '重传合同扫描件' : '上传合同扫描件' }}</a>
+        </el-upload>
         <a class="tbtn" :style="saving ? 'opacity:.5' : ''" @click="save">{{ saving ? '保存中…' : '保存草稿' }}</a>
         <a class="tbtn" @click="submit">{{ rejected ? '保存并重交' : '提交' }}</a>
       </template>
+      <a v-if="flowStatus >= 1" @click="print">打印 / 导出 PDF</a>
     </div>
 
     <RegisterSheet ref="sheetRef" :model="form" :mode="canEdit ? 'edit' : 'print'"
       :show-hints="showHints" :meta="meta" @change="onChange" />
-
-    <div v-if="canEdit" class="pageops">
-      <el-button type="primary" :loading="saving" @click="save">保存草稿</el-button>
-      <el-button type="success" :loading="submitting" @click="submit">{{ rejected ? '保存并重交' : '提交' }}</el-button>
-      <el-upload :show-file-list="false" :http-request="doUploadContract"
-        :accept="'.pdf,.png,.jpg,.jpeg'" class="inline-block">
-        <el-button>{{ contractFile ? '重新上传合同扫描件' : '上传合同扫描件(选填)' }}</el-button>
-      </el-upload>
-      <span v-if="contractFile" class="contract-name">已传:{{ contractFile }}</span>
-      <el-button v-if="flowStatus >= 1" @click="print">打印</el-button>
-    </div>
   </div>
 </template>
 
@@ -40,6 +31,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+
 import {
   flowDetail, getConfig, listDepts, listDict, resubmit, saveRegisterDraft, submitRegister,
   uploadContract
@@ -141,6 +133,16 @@ async function submit() {
   if (Math.abs(total - Number(payload.hx.contractAmount)) > 0.005) {
     ElMessage.warning(`预算合计(${total.toFixed(2)})须等于合同经费(${Number(payload.hx.contractAmount).toFixed(2)})元`)
     return
+  }
+  /* 提交确认(HTML转正口径):审批前仍可改,但打印签章版必须为最终修改版 */
+  const tip = rejected.value
+    ? '重交后原盖章件作废,需重新盖章回扫。'
+    : '提交后仍可修改,但打印版必须为最终修改版。'
+  try {
+    await ElMessageBox.confirm(tip + '请确认当前填报数据无误。', '确认提交',
+      { confirmButtonText: '确认提交', cancelButtonText: '再检查一下', type: 'info' })
+  } catch (e) {
+    return   // 用户取消
   }
   submitting.value = true
   try {
@@ -253,18 +255,5 @@ onMounted(async () => {
 }
 .topbar {
   margin-bottom: 8px;
-}
-.pageops {
-  margin: 14px 4px 40px;
-  display: flex;
-  gap: 10px;
-  align-items: center;
-}
-.inline-block {
-  display: inline-flex;
-}
-.contract-name {
-  color: #909399;
-  font-size: 12px;
 }
 </style>
