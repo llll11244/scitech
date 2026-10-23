@@ -26,7 +26,7 @@
         <el-button @click="qKeyword = ''">重置</el-button>
       </div>
 
-      <el-table :data="filtered" v-loading="loading" @row-click="open">
+      <el-table :data="paged" v-loading="loading" @row-click="open">
         <el-table-column label="类型" width="96">
           <template #default="{ row }">
             <el-tag :type="TYPE_TAG[row.flowType]?.type || 'info'" effect="plain">
@@ -69,6 +69,11 @@
           </template>
         </el-table-column>
       </el-table>
+
+      <el-pagination v-if="filtered.length" v-model:current-page="currentPage"
+        v-model:page-size="pageSize" :page-sizes="[10, 20, 30, 50]" :total="filtered.length"
+        layout="total, sizes, prev, pager, next" background class="pager" />
+
       <el-empty v-if="!loading && !filtered.length"
         :description="qKeyword ? '没有符合条件的流程单' : '暂无流程单'" :image-size="70" />
     </el-card>
@@ -80,7 +85,7 @@
   点行进审批详情。量小不分页(与后端口径一致)。
 -->
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { auditList } from '../../api/hx'
 
@@ -97,6 +102,17 @@ const filtered = computed(() => {
   if (!kw) return rows.value
   return rows.value.filter((row) => [row.name, row.leaderName, row.deptName]
     .some((v) => (v || '').toLowerCase().includes(kw)))
+})
+
+/* 分页:默认 20/页可调;过滤/刷新后页码自动回正 */
+const currentPage = ref(1)
+const pageSize = ref(20)
+const paged = computed(() =>
+  filtered.value.slice((currentPage.value - 1) * pageSize.value, currentPage.value * pageSize.value))
+watch([qKeyword, flowType, status], () => { currentPage.value = 1 })
+watch(() => filtered.value.length, (n) => {
+  const maxPage = Math.max(1, Math.ceil(n / pageSize.value))
+  if (currentPage.value > maxPage) currentPage.value = maxPage
 })
 
 const STATUS = {
@@ -152,6 +168,10 @@ export default { name: 'AuditList' }
 }
 .w-240 {
   width: 240px;
+}
+.pager {
+  margin-top: 12px;
+  justify-content: flex-end;
 }
 .filters {
   display: flex;

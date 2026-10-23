@@ -18,7 +18,7 @@
         <el-button @click="qKeyword = ''; qExec = ''">重置</el-button>
       </div>
 
-      <el-table :data="filtered" v-loading="loading" row-key="projectId" @expand-change="onExpand">
+      <el-table :data="paged" v-loading="loading" row-key="projectId" @expand-change="onExpand">
         <!-- 行展开:到账明细管理 -->
         <el-table-column type="expand">
           <template #default="{ row }">
@@ -81,6 +81,11 @@
           <template #default="{ row }">{{ String(row.hxRegisterDate || '').slice(0, 10) || '—' }}</template>
         </el-table-column>
       </el-table>
+
+      <el-pagination v-if="filtered.length" v-model:current-page="currentPage"
+        v-model:page-size="pageSize" :page-sizes="[10, 20, 30, 50]" :total="filtered.length"
+        layout="total, sizes, prev, pager, next" background class="pager" />
+
       <el-empty v-if="!loading && !filtered.length"
         :description="qKeyword || qExec ? '没有符合条件的项目' : '暂无横向项目'" :image-size="70" />
     </el-card>
@@ -119,7 +124,7 @@
   到账累计/执行状态/登记日期)+在途流程单提示;行展开=到账明细管理(admin 增删,Task25 接口)。
 -->
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { addFunding, adminFunding, deleteFunding, projectList } from '../../api/hx'
 
@@ -142,6 +147,17 @@ const filtered = computed(() => {
     }
     return !qExec.value || row.execStatus === qExec.value
   })
+})
+
+/* 分页:默认 20/页可调;过滤后页码自动回正 */
+const currentPage = ref(1)
+const pageSize = ref(20)
+const paged = computed(() =>
+  filtered.value.slice((currentPage.value - 1) * pageSize.value, currentPage.value * pageSize.value))
+watch([qKeyword, qExec], () => { currentPage.value = 1 })
+watch(() => filtered.value.length, (n) => {
+  const maxPage = Math.max(1, Math.ceil(n / pageSize.value))
+  if (currentPage.value > maxPage) currentPage.value = maxPage
 })
 
 const EXEC_TAG = { 登记中: 'warning', 在研: 'success', 变更中: 'warning', 已结题: 'info' }
@@ -273,6 +289,11 @@ export default { name: 'ProjectManage' }
 
 .w-150 {
   width: 150px;
+}
+
+.pager {
+  margin-top: 12px;
+  justify-content: flex-end;
 }
 
 .expand-box {

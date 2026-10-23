@@ -21,7 +21,7 @@
       <el-empty v-if="!loading && !filtered.length"
         :description="qKeyword || qState ? '没有符合条件的项目' : '暂无项目,点击右上角「新建登记」发起第一项横向项目'" />
 
-      <el-table v-else :data="filtered" v-loading="loading">
+      <el-table v-else :data="paged" v-loading="loading">
         <el-table-column label="项目名称" min-width="220" show-overflow-tooltip>
           <template #default="{ row }">
             <el-link type="primary" @click="openDetail(row)">{{ row.name }}</el-link>
@@ -69,12 +69,17 @@
           </template>
         </el-table-column>
       </el-table>
+
+      <!-- 分页:默认 20/页,可调 10/30/50;过滤/删行后页码自动回正 -->
+      <el-pagination v-if="filtered.length" v-model:current-page="currentPage"
+        v-model:page-size="pageSize" :page-sizes="[10, 20, 30, 50]" :total="filtered.length"
+        layout="total, sizes, prev, pager, next" background class="pager" />
     </el-card>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { myProjects, deleteDraft } from '../../api/hx'
@@ -101,6 +106,17 @@ const filtered = computed(() => {
     }
     return true
   })
+})
+
+/* 分页:默认 20/页可调;过滤条件变化回第 1 页,行数缩减自动钳制越界页码 */
+const currentPage = ref(1)
+const pageSize = ref(20)
+const paged = computed(() =>
+  filtered.value.slice((currentPage.value - 1) * pageSize.value, currentPage.value * pageSize.value))
+watch([qKeyword, qState], () => { currentPage.value = 1 })
+watch(() => filtered.value.length, (n) => {
+  const maxPage = Math.max(1, Math.ceil(n / pageSize.value))
+  if (currentPage.value > maxPage) currentPage.value = maxPage
 })
 
 const registerFlow = (row) => row.flows?.find((f) => f.flowType === 'register')
@@ -191,5 +207,9 @@ export default { name: 'MyProjects' }
 }
 .w-150 {
   width: 150px;
+}
+.pager {
+  margin-top: 12px;
+  justify-content: flex-end;
 }
 </style>
