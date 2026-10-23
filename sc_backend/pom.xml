@@ -21,10 +21,6 @@
         <java.version>17</java.version>
         <mybatis-plus.version>3.5.7</mybatis-plus.version>
         <jjwt.version>0.12.6</jjwt.version>
-        <poi-tl.version>1.12.2</poi-tl.version>
-        <jodconverter.version>4.4.7</jodconverter.version>
-        <poi.version>5.2.5</poi.version>
-        <pdfbox.version>2.0.31</pdfbox.version>
     </properties>
 
     <dependencies>
@@ -69,30 +65,6 @@
             <artifactId>jjwt-jackson</artifactId>
             <version>${jjwt.version}</version>
             <scope>runtime</scope>
-        </dependency>
-        <!-- poi-tl:docx 模板渲染(PDF 子系统) -->
-        <dependency>
-            <groupId>com.deepoove</groupId>
-            <artifactId>poi-tl</artifactId>
-            <version>${poi-tl.version}</version>
-        </dependency>
-        <!-- JODConverter 本地进程:docx→PDF -->
-        <dependency>
-            <groupId>org.jodconverter</groupId>
-            <artifactId>jodconverter-local</artifactId>
-            <version>${jodconverter.version}</version>
-        </dependency>
-        <!-- POI 显式统一版本(poi-tl 传递的 poi 与 jodconverter 可能不一致) -->
-        <dependency>
-            <groupId>org.apache.poi</groupId>
-            <artifactId>poi-ooxml</artifactId>
-            <version>${poi.version}</version>
-        </dependency>
-        <!-- PDFBox:终版 PDF 元数据写入 -->
-        <dependency>
-            <groupId>org.apache.pdfbox</groupId>
-            <artifactId>pdfbox</artifactId>
-            <version>${pdfbox.version}</version>
         </dependency>
         <!-- 热修:classpath 变化(IDE保存自动编译)后 Spring 上下文秒级重启 -->
         <dependency>
