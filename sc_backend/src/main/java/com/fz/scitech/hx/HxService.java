@@ -204,6 +204,7 @@ public class HxService {
                     .set(RpHxProject::getChargeMgmtFee, hx.getChargeMgmtFee())
                     .set(RpHxProject::getMgmtFeeAmount, hx.getMgmtFeeAmount())
                     .set(RpHxProject::getLeaderEmail, hx.getLeaderEmail())
+                    .set(RpHxProject::getLeaderPhone, hx.getLeaderPhone())
                     .set(RpHxProject::getProjectSummary, hx.getProjectSummary())
                     .set(RpHxProject::getProgressPlan, hx.getProgressPlan()));
         }
@@ -232,6 +233,7 @@ public class HxService {
         lenCheck(dto.getLeaderName(), 64, "负责人姓名");
         lenCheck(h.getClientName(), 255, "委托单位名称");
         lenCheck(h.getLeaderEmail(), 128, "电子邮箱");
+        lenCheck(h.getLeaderPhone(), 20, "联系电话");
         lenCheck(h.getProjectSummary(), 800, "项目简介");
         lenCheck(h.getProgressPlan(), 800, "项目计划进度");
     }
@@ -1138,6 +1140,7 @@ public class HxService {
         hx.setChargeMgmtFee(h.getChargeMgmtFee());
         // mgmtFeeAmount 不入 DTO(比例归科技处,金额由 MgmtFeePolicy 换算)
         hx.setLeaderEmail(h.getLeaderEmail());
+        hx.setLeaderPhone(h.getLeaderPhone());
         hx.setProjectSummary(h.getProjectSummary());
         hx.setProgressPlan(h.getProgressPlan());
     }

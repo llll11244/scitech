@@ -7,14 +7,13 @@
 
     <div class="btoolbar">
       <label class="hintswitch"><input type="checkbox" v-model="showHints">显示填写提示</label>
-      <template v-if="canEdit">
-        <el-upload :show-file-list="false" :http-request="doUploadContract" :accept="'.pdf,.png,.jpg,.jpeg'">
-          <a class="tbtn">{{ contractFile ? '重传合同扫描件' : '上传合同扫描件' }}</a>
-        </el-upload>
-        <a class="tbtn" :style="saving ? 'opacity:.5' : ''" @click="save">{{ saving ? '保存中…' : '保存草稿' }}</a>
-        <a class="tbtn" @click="submit">{{ rejected ? '保存并重交' : '提交' }}</a>
-      </template>
-      <a v-if="flowStatus >= 1" @click="print">打印 / 导出 PDF</a>
+      <el-upload v-if="canEdit" :show-file-list="false" :http-request="doUploadContract"
+        :accept="'.pdf,.png,.jpg,.jpeg'">
+        <el-button size="small">{{ contractFile ? '重传合同扫描件' : '上传合同扫描件' }}</el-button>
+      </el-upload>
+      <el-button v-if="canEdit" size="small" :loading="saving" @click="save">保存草稿</el-button>
+      <el-button v-if="canEdit" size="small" type="primary" @click="submit">{{ rejected ? '保存并重交' : '提交' }}</el-button>
+      <el-button v-if="flowStatus >= 1" size="small" type="primary" plain @click="print">打印 / 导出 PDF</el-button>
     </div>
 
     <RegisterSheet ref="sheetRef" :model="form" :mode="canEdit ? 'edit' : 'print'"
@@ -64,7 +63,7 @@ const form = reactive({
   hx: {
     projectType: '', clientName: '', clientNature: '', contractAmount: null,
     startDate: '', endDate: '', useSchoolAsset: 0, chargeMgmtFee: 0,
-    leaderEmail: '', projectSummary: '', progressPlan: ''
+    leaderEmail: '', leaderPhone: '', projectSummary: '', progressPlan: ''
   },
   members: [{ memberType: '教师', employeeNo: '', name: '', unit: '', title: '', major: '', duty: '' }],
   budgets: []
@@ -212,7 +211,9 @@ async function loadDraft(flowId) {
     startDate: hx.startDate ? String(hx.startDate).slice(0, 10) : '',
     endDate: hx.endDate ? String(hx.endDate).slice(0, 10) : '',
     useSchoolAsset: hx.useSchoolAsset ?? 0, chargeMgmtFee: hx.chargeMgmtFee ?? 0,
-    leaderEmail: hx.leaderEmail || '', projectSummary: hx.projectSummary || '',
+    leaderEmail: hx.leaderEmail || '',
+    leaderPhone: hx.leaderPhone || (form.hx.leaderPhone || ''),   // 存量优先,否则保留带出的手机号
+    projectSummary: hx.projectSummary || '',
     progressPlan: hx.progressPlan || ''
   })
   form.members = (d.members || []).map((m) => ({
@@ -231,7 +232,8 @@ async function loadDraft(flowId) {
 
 onMounted(async () => {
   form.leaderName = userStore.userInfo?.realName || ''
-  meta.leaderPhone = userStore.userInfo?.phone || ''
+  /* 联系电话默认带出本人手机号(/users/me),存量回填时以项目存值优先 */
+  form.hx.leaderPhone = userStore.userInfo?.phone || ''
   getConfig('hx_mgmt_fee_rate').then((v) => { meta.mgmtRate = v == null ? null : Number(v) })
   const [ds, pt, cn, tt, bs] = await Promise.all([
     listDepts(), listDict('hx_project_type'), listDict('hx_client_nature'), listDict('title'),

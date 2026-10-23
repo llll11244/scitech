@@ -27,6 +27,7 @@ public class RegisterSaveDTO {
         private Integer chargeMgmtFee;
         // mgmtFeeAmount 已收归后端:比例=科技处配置(sys_config),金额=合同经费×比例自动换算,不入 DTO
         private String leaderEmail;
+        private String leaderPhone;   // 联系电话(默认带出本人手机号,可改)
         private String projectSummary;
         private String progressPlan;
     }

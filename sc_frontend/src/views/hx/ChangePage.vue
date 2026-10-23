@@ -5,11 +5,9 @@
 
     <div class="btoolbar">
       <label class="hintswitch"><input type="checkbox" v-model="showHints">显示填写提示</label>
-      <template v-if="canEdit">
-        <a class="tbtn" :style="saving ? 'opacity:.5' : ''" @click="save">{{ saving ? '保存中…' : '保存草稿' }}</a>
-        <a class="tbtn" @click="submit">{{ rejected ? '保存并重交' : '提交' }}</a>
-      </template>
-      <a v-if="flowStatus >= 1" @click="print">打印 / 导出 PDF</a>
+      <el-button v-if="canEdit" size="small" :loading="saving" @click="save">保存草稿</el-button>
+      <el-button v-if="canEdit" size="small" type="primary" @click="submit">{{ rejected ? '保存并重交' : '提交' }}</el-button>
+      <el-button v-if="flowStatus >= 1" size="small" type="primary" plain @click="print">打印 / 导出 PDF</el-button>
     </div>
 
     <!-- 项目选择(屏显操作条;选定后 A 区实态只读) -->
@@ -148,13 +146,20 @@ function print() {
 }
 
 /* 选项目→实态填 A 区(经 flowDetail 拿完整实态) */
+/* 选项目→A 区实态:my 行无顶层 flowId,从 flows[] 找登记流程单(实态数据源) */
 async function pickProject(pid) {
   const p = projects.value.find((x) => x.projectId === pid)
   if (!p) return
-  await fillOrig(p)
+  const reg = (p.flows || []).find((f) => f.flowType === 'register')
+  if (!reg) {
+    ElMessage.warning('未找到该项目的登记流程单,无法带出原信息')
+    return
+  }
+  fillOrigFromDetail(await flowDetail(reg.flowId))
 }
-async function fillOrig(p) {
-  const d = await flowDetail(p.flowId)
+
+/** 实态填 A 区 + 勾选联动的原信息(ORIG)数据源 */
+function fillOrigFromDetail(d) {
   meta.orig = {
     approvalNo: d.project.approvalNo || '', name: d.project.name,
     leaderName: d.project.leaderName, leaderPhone: d.project.leaderPhone || '',
@@ -186,8 +191,7 @@ async function loadDraft(flowId) {
   form.newAmount = d.flow.newAmount
   form.newEndDate = d.flow.newEndDate ? String(d.flow.newEndDate).slice(0, 10) : ''
   form.newLeaderId = d.flow.newLeaderId
-  await fillOrig({ projectId: d.flow.projectId, flowId: d.flow.id })
-  form.projectType = d.hx.projectType || ''
+  fillOrigFromDetail(d)
 }
 
 onMounted(async () => {

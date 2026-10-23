@@ -35,6 +35,8 @@ public class RpHxProject {
     /** 管理费金额(元) */
     private BigDecimal mgmtFeeAmount;
     private String leaderEmail;
+    /** 联系电话(默认带出本人手机号,教师可改) */
+    private String leaderPhone;
     /** 项目简介(200-300字,登记表) */
     private String projectSummary;
     /** 项目计划进度(200-300字,登记表) */

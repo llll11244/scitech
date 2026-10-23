@@ -34,8 +34,8 @@
           <tr>
             <td class="lbl">变更内容</td>
             <td colspan="3">
-              <!-- 勾选联动:系统带出原信息行 -->
-              <div v-for="o in activeOrigs" :key="o.key" class="oriline">· {{ o.label }}(原,系统带出):{{ o.value }}</div>
+              <!-- 勾选联动:带出原信息行 -->
+              <div v-for="o in activeOrigs" :key="o.key" class="oriline">· {{ o.label }} 原:{{ o.value }}</div>
               <div v-if="!model.changeTypes.length" class="oriline hint">尚未勾选变更事项——勾选后自动带出对应项原信息</div>
 
               <!-- 联动录入:勾了哪项就填哪项 -->
@@ -153,7 +153,10 @@ const ORIG = computed(() => ({
 }))
 const KEYS = { 项目经费: 'fee', 执行周期: 'period', 项目负责人: 'leader', 委托内容: 'content', 其他约定: 'other' }
 const activeOrigs = computed(() => (props.model.changeTypes || [])
-  .map((t) => ORIG.value[KEYS[t]])
+  .map((t) => {
+    const kv = ORIG.value[KEYS[t]]
+    return kv ? { label: kv[0], value: kv[1] } : null
+  })
   .filter(Boolean))
 
 function cnRange(s) {

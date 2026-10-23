@@ -153,6 +153,7 @@ CREATE TABLE IF NOT EXISTS rp_hx_project (
   charge_mgmt_fee TINYINT COMMENT '是否收管理费0/1',
   mgmt_fee_amount DECIMAL(14,2) COMMENT '管理费金额(元)',
   leader_email VARCHAR(128) COMMENT '负责人邮箱',
+  leader_phone VARCHAR(20) COMMENT '联系电话(默认带出本人手机号,教师可改)',
   project_summary TEXT COMMENT '项目简介(200-300字,登记表)',
   progress_plan TEXT COMMENT '项目计划进度(200-300字,登记表)',
   hx_register_date DATE COMMENT '立项登记日期(科技处确认时写入)',
@@ -321,6 +322,15 @@ SET @col = (SELECT IF(COUNT(*) = 0,
   'ALTER TABLE rp_hx_flow ADD COLUMN finish_date DATE DEFAULT NULL COMMENT ''项目完成时间(验收单教师填报;区别rp_project.finish_date=审批结题日)'' AFTER used_amount',
   'SELECT 1') FROM information_schema.COLUMNS
   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'rp_hx_flow' AND COLUMN_NAME = 'finish_date');
+PREPARE stmt FROM @col;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+-- HTML转正二轮(2026-10-23):联系电话可改存项目(默认带出本人手机号)
+SET @col = (SELECT IF(COUNT(*) = 0,
+  'ALTER TABLE rp_hx_project ADD COLUMN leader_phone VARCHAR(20) DEFAULT NULL COMMENT ''联系电话(默认带出本人手机号,教师可改)'' AFTER leader_email',
+  'SELECT 1') FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'rp_hx_project' AND COLUMN_NAME = 'leader_phone');
 PREPARE stmt FROM @col;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;

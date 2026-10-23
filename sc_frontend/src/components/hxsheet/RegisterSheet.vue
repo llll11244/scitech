@@ -71,7 +71,11 @@
             </td>
           </tr>
           <tr>
-            <td class="lbl">联系电话</td><td colspan="2" class="num">{{ meta.leaderPhone }}</td>
+            <td class="lbl">联系电话</td><td colspan="2">
+              <input v-if="mode === 'edit'" v-model.trim="model.hx.leaderPhone" class="cellinput num"
+                maxlength="20" placeholder="默认本人手机号,可改">
+              <template v-else>{{ model.hx.leaderPhone }}</template>
+            </td>
             <td class="lbl">电子邮箱</td><td colspan="3">
               <input v-if="mode === 'edit'" v-model.trim="model.hx.leaderEmail" class="cellinput" maxlength="128" placeholder="选填">
               <template v-else>{{ model.hx.leaderEmail }}</template>

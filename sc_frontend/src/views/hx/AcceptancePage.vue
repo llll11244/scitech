@@ -7,12 +7,10 @@
 
     <div class="btoolbar">
       <label class="hintswitch"><input type="checkbox" v-model="showHints">显示填写提示</label>
-      <template v-if="canEdit">
-        <a class="tbtn" :style="saving ? 'opacity:.5' : ''" @click="save">{{ saving ? '保存中…' : '保存草稿' }}</a>
-        <a class="tbtn" @click="submit">{{ rejected ? '保存并重交' : '提交' }}</a>
-      </template>
-      <a v-if="flowStatus >= 1" @click="print('hx_acceptance')">打印验收登记表</a>
-      <a v-if="flowStatus >= 1" @click="print('hx_report')">打印验收报告</a>
+      <el-button v-if="canEdit" size="small" :loading="saving" @click="save">保存草稿</el-button>
+      <el-button v-if="canEdit" size="small" type="primary" @click="submit">{{ rejected ? '保存并重交' : '提交' }}</el-button>
+      <el-button v-if="flowStatus >= 1" size="small" type="primary" plain @click="print('hx_acceptance')">打印验收登记表</el-button>
+      <el-button v-if="flowStatus >= 1" size="small" type="primary" plain @click="print('hx_report')">打印验收报告</el-button>
     </div>
 
     <div v-if="mode === 'edit' && !form.flowId" class="pick">
@@ -45,7 +43,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { flowDetail, listDict, myProjects, resubmit, saveAcceptanceDraft, submitAcceptance } from '../../api/hx'
+import { flowDetail, listDict, myProjects, resubmit, saveAcceptanceDraft, submitAcceptance, teacherFunding } from '../../api/hx'
 import AcceptanceSheet from '../../components/hxsheet/AcceptanceSheet.vue'
 import ReportSheet from '../../components/hxsheet/ReportSheet.vue'
 import { toWan } from '../../utils/rmb'
@@ -181,8 +179,14 @@ function print(tab) {
 }
 
 /* 实态与登记成员回显 */
-async function fillFromProject(pid, regFlowId) {
-  const d = await flowDetail(regFlowId)
+/* 选项目→实态+登记成员回显+到账(teacherFunding {records,total});my 行无顶层 flowId,从 flows[] 找登记单 */
+async function fillFromProject(pid, p) {
+  const reg = (p.flows || []).find((f) => f.flowType === 'register')
+  if (!reg) {
+    ElMessage.warning('未找到该项目的登记流程单,无法带出信息')
+    return
+  }
+  const d = await flowDetail(reg.flowId)
   meta.orig = {
     approvalNo: d.project.approvalNo || '', name: d.project.name,
     leaderName: d.project.leaderName,
@@ -193,25 +197,27 @@ async function fillFromProject(pid, regFlowId) {
   }
   form.projectType = d.hx.projectType || ''
   form.clientNature = d.hx.clientNature || ''
-  const d2 = await flowDetail(regFlowId)
-  form.members = (d2.members || []).filter((m) => m.memberType !== '学生').map((m) => ({
+  form.members = (d.members || []).filter((m) => m.memberType !== '学生').map((m) => ({
     memberType: m.memberType || '教师', employeeNo: m.employeeNo || '', name: m.name || '',
     unit: m.unit || '', title: m.title || '', major: m.major || '', duty: m.duty || '',
     ratio: m.ratio ?? null, amount: m.amount ?? null
   }))
-  form.students = (d2.members || []).filter((m) => m.memberType === '学生').map((m) => ({
+  form.students = (d.members || []).filter((m) => m.memberType === '学生').map((m) => ({
     name: m.name || '', studentNo: m.studentNo || '', major: m.major || '', mentor: m.mentor || '',
     duty: m.duty || ''
   }))
-  const acc = await myProjects()
-  const row = (acc || []).find((x) => x.projectId === pid)
-  meta.receivedTotal = row ? row.receivedTotal ?? null : null
+  try {
+    const f = await teacherFunding(pid)
+    meta.receivedTotal = f && f.total !== undefined ? f.total : null
+  } catch (e) {
+    meta.receivedTotal = null
+  }
 }
 
 async function pickProject(pid) {
   const p = projects.value.find((x) => x.projectId === pid)
   if (!p) return
-  await fillFromProject(pid, p.flowId)
+  await fillFromProject(pid, p)
 }
 
 async function loadDraft(flowId) {
@@ -275,7 +281,7 @@ onMounted(async () => {
     const p = projects.value.find((x) => x.projectId === pid)
     if (p) {
       form.projectId = pid
-      await fillFromProject(pid, p.flowId)
+      await fillFromProject(pid, p)
     }
   }
 })
