@@ -5,13 +5,12 @@
     <el-alert v-else-if="receivedTotal === null || receivedTotal <= 0" type="warning" :closable="false"
       class="topbar" title="暂无到账记录:验收需按到账经费核算成员分配,请联系科技处录入到账后再提交。" />
 
-    <div class="btoolbar">
-      <label class="hintswitch"><input type="checkbox" v-model="showHints">显示填写提示</label>
+    <SheetToolbar v-model:show-hints="showHints">
       <el-button v-if="canEdit" size="small" :loading="saving" @click="save">保存草稿</el-button>
       <el-button v-if="canEdit" size="small" type="primary" @click="submit">{{ rejected ? '保存并重交' : '提交' }}</el-button>
       <el-button v-if="flowStatus >= 1" size="small" type="primary" plain @click="print('hx_acceptance')">打印验收登记表</el-button>
       <el-button v-if="flowStatus >= 1" size="small" type="primary" plain @click="print('hx_report')">打印验收报告</el-button>
-    </div>
+    </SheetToolbar>
 
     <div v-if="mode === 'edit' && !form.flowId" class="pick">
       <span>选择已确认的项目:</span>
@@ -46,6 +45,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { flowDetail, listDict, myProjects, resubmit, saveAcceptanceDraft, submitAcceptance, teacherFunding } from '../../api/hx'
 import AcceptanceSheet from '../../components/hxsheet/AcceptanceSheet.vue'
 import ReportSheet from '../../components/hxsheet/ReportSheet.vue'
+import SheetToolbar from '../../components/hxsheet/SheetToolbar.vue'
 import { toWan } from '../../utils/rmb'
 
 const route = useRoute()

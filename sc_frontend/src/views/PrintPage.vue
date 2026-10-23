@@ -1,9 +1,9 @@
 <template>
   <div v-if="ready" class="print-root">
-    <div class="btoolbar print-bar">
+    <SheetToolbar :hints="false">
       <el-button size="small" type="primary" @click="print">打印 / 另存为 PDF</el-button>
       <span class="tip">对话框:目标=另存为 PDF,布局=纵向,A4;若水印未输出请勾选「背景图形」</span>
-    </div>
+    </SheetToolbar>
 
     <RegisterSheet v-if="flowType === 'register'" :model="model" mode="print"
       :show-hints="false" :meta="meta" />
@@ -28,6 +28,7 @@ import { useRoute } from 'vue-router'
 import { flowDetail } from '../api/hx'
 import { buildSheetModel } from '../composables/sheetModel'
 import AcceptanceSheet from '../components/hxsheet/AcceptanceSheet.vue'
+import SheetToolbar from '../components/hxsheet/SheetToolbar.vue'
 import ChangeSheet from '../components/hxsheet/ChangeSheet.vue'
 import RegisterSheet from '../components/hxsheet/RegisterSheet.vue'
 import ReportSheet from '../components/hxsheet/ReportSheet.vue'

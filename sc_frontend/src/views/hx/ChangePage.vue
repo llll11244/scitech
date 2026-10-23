@@ -3,12 +3,11 @@
     <el-alert v-if="rejected" type="warning" :closable="false" class="topbar"
       :title="'退回单:修改后请点击「保存并重交」。退回意见:' + (rejectOpinion || '见时间线')" />
 
-    <div class="btoolbar">
-      <label class="hintswitch"><input type="checkbox" v-model="showHints">显示填写提示</label>
+    <SheetToolbar v-model:show-hints="showHints">
       <el-button v-if="canEdit" size="small" :loading="saving" @click="save">保存草稿</el-button>
       <el-button v-if="canEdit" size="small" type="primary" @click="submit">{{ rejected ? '保存并重交' : '提交' }}</el-button>
       <el-button v-if="flowStatus >= 1" size="small" type="primary" plain @click="print">打印 / 导出 PDF</el-button>
-    </div>
+    </SheetToolbar>
 
     <!-- 项目选择(屏显操作条;选定后 A 区实态只读) -->
     <div v-if="mode === 'edit' && !form.flowId" class="pick">
@@ -34,6 +33,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { flowDetail, listDict, myProjects, resubmit, saveChangeDraft, submitChange } from '../../api/hx'
 import ChangeSheet from '../../components/hxsheet/ChangeSheet.vue'
+import SheetToolbar from '../../components/hxsheet/SheetToolbar.vue'
 
 const route = useRoute()
 const router = useRouter()

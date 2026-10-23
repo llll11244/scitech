@@ -5,8 +5,7 @@
     <el-alert v-else-if="flowStatus === 1 || flowStatus === 2" type="info" :closable="false" class="topbar"
       title="已提交:审批通过前仍可直接修改数据;打印请用右上「打印」,盖章扫描件与最新数据的差异请留意提示。" />
 
-    <div class="btoolbar">
-      <label class="hintswitch"><input type="checkbox" v-model="showHints">显示填写提示</label>
+    <SheetToolbar v-model:show-hints="showHints">
       <el-upload v-if="canEdit" :show-file-list="false" :http-request="doUploadContract"
         :accept="'.pdf,.png,.jpg,.jpeg'">
         <el-button size="small">{{ contractFile ? '重传合同扫描件' : '上传合同扫描件' }}</el-button>
@@ -14,7 +13,7 @@
       <el-button v-if="canEdit" size="small" :loading="saving" @click="save">保存草稿</el-button>
       <el-button v-if="canEdit" size="small" type="primary" @click="submit">{{ rejected ? '保存并重交' : '提交' }}</el-button>
       <el-button v-if="flowStatus >= 1" size="small" type="primary" plain @click="print">打印 / 导出 PDF</el-button>
-    </div>
+    </SheetToolbar>
 
     <RegisterSheet ref="sheetRef" :model="form" :mode="canEdit ? 'edit' : 'print'"
       :show-hints="showHints" :meta="meta" @change="onChange" />
@@ -37,6 +36,7 @@ import {
 } from '../../api/hx'
 import { useUserStore } from '../../stores/user'
 import RegisterSheet from '../../components/hxsheet/RegisterSheet.vue'
+import SheetToolbar from '../../components/hxsheet/SheetToolbar.vue'
 
 const route = useRoute()
 const router = useRouter()
