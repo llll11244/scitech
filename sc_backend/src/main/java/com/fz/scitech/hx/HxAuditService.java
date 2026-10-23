@@ -76,13 +76,15 @@ public class HxAuditService {
 
     // ---------- 审批列表 ----------
     /**
-     * 审批列表(admin,spec §6.3):flow+project+负责人/院部聚合,全量按提交时间倒序
-     * (草稿无 submit_time 自然沉底),flowType/status 可选过滤;量小不做分页。
+     * 审批列表(admin,spec §6.3):flow+project+负责人/院部聚合,全量按提交时间倒序,
+     * flowType/status 可选过滤;量小不做分页。
+     * 2026-10-23 预审流转:草稿(status=0)仅教师端可见,对科技处一律不显示。
      */
     public List<Map<String, Object>> auditList(String flowType, Integer status) {
         List<RpHxFlow> flows = flowMapper.selectList(new LambdaQueryWrapper<RpHxFlow>()
                 .eq(flowType != null && !flowType.isBlank(), RpHxFlow::getFlowType, flowType)
                 .eq(status != null, RpHxFlow::getStatus, status)
+                .ne(RpHxFlow::getStatus, HxFlowStatus.DRAFT)
                 .orderByDesc(RpHxFlow::getSubmitTime)
                 .orderByDesc(RpHxFlow::getId));
         if (flows.isEmpty()) {
@@ -148,7 +150,7 @@ public class HxAuditService {
                 .set(RpHxProject::getHxRegisterDate, LocalDate.now()));
         notifyTeacher(p.getApplyUserId(), "横向项目登记确认通过",
                 "您的横向项目《" + p.getName() + "》已通过登记确认,项目编号:" + approvalNo
-                        + ",已正式入台账(在研)。", pid, adminName);
+                        + ",已正式入台账(在研)。", pid, flow.getId(), adminName);
         hxService.saveRecord(flow, HxFlowStatus.ACT_APPROVE, adminName, adminId, null);
     }
 
@@ -191,10 +193,10 @@ public class HxAuditService {
         String content = "您的项目《" + p.getName() + "》变更单已通过审核并生效(变更类型:"
                 + flow.getChangeType() + "),相关字段已按变更内容更新。";
         // 负责人已变更时项目归属同步迁移:原负责人与新负责人都通知(原负责人需知晓项目已移交)
-        notifyTeacher(p.getApplyUserId(), "横向项目变更生效", content, pid, adminName);
+        notifyTeacher(p.getApplyUserId(), "横向项目变更生效", content, pid, flow.getId(), adminName);
         if (leaderChanged) {
             notifyTeacher(flow.getNewLeaderId(), "横向项目变更生效",
-                    "项目《" + p.getName() + "》负责人已变更为您,请关注后续流程。", pid, adminName);
+                    "项目《" + p.getName() + "》负责人已变更为您,请关注后续流程。", pid, flow.getId(), adminName);
         }
         hxService.saveRecord(flow, HxFlowStatus.ACT_APPROVE, adminName, adminId, null);
     }
@@ -224,14 +226,34 @@ public class HxAuditService {
         // HTML转正(决策①):不再渲终版 docx 归档件;通过后教师/ admin 打印只读页(带后台项)即终版
         notifyTeacher(p.getApplyUserId(), "横向项目验收通过",
                 "您的项目《" + p.getName() + "》已通过验收确认,核定到账金额:" + verifiedAmount
-                        + " 元,项目已结题。", pid, adminName);
+                        + " 元,项目已结题。", pid, flow.getId(), adminName);
         hxService.saveRecord(flow, HxFlowStatus.ACT_VERIFY, adminName, adminId,
                 "核定到账金额:" + verifiedAmount + " 元");
     }
 
+    // ---------- 预审通过(2026-10-23 预审流转) ----------
+    /**
+     * 科技处预审通过:仅预审中(1)可调,1→5;通知教师「请打印盖章后上传扫描件」+留痕 ACT_PRECHECK。
+     * 预审通过前教师不可上传盖章扫描件(HxService.uploadScan 门槛)。
+     */
+    @Transactional
+    public void precheckPass(Long adminId, String adminName, Long flowId) {
+        RpHxFlow flow = requireFlow(flowId);
+        if (flow.getStatus() != HxFlowStatus.SUBMITTED) {
+            throw new BizException("仅预审中(已提交)单可预审通过");
+        }
+        RpProject p = requireProject(flow.getProjectId());
+        hxService.transit(flowId, HxFlowStatus.SUBMITTED, HxFlowStatus.PRECHECK_PASSED);
+        notifyTeacher(p.getApplyUserId(), "横向" + flowLabel(flow.getFlowType()) + "单预审通过",
+                "您的" + flowLabel(flow.getFlowType()) + "单(项目《" + p.getName()
+                        + "》)已通过科技处预审,请打印单据、线下盖章后将扫描件上传系统,进入审核。",
+                p.getId(), flow.getId(), adminName);
+        hxService.saveRecord(flow, HxFlowStatus.ACT_PRECHECK, adminName, adminId, null);
+    }
+
     // ---------- admin 代改(HTML转正 决策③) ----------
     /**
-     * admin 修正教师填报数据(任意字段):仅 status∈{1,2}(4=教师重交域,3=锁定);
+     * admin 修正教师填报数据(任意字段):仅 status∈{1,2,5}(4=教师重交域,3=锁定);
      * 与提交同强度校验(必填/字数/金额核算);留痕 admin_edit+通知教师(提示扫描件可能滞后)。
      * body=对应流程的保存 DTO 原始 JSON(与教师保存接口同结构)。
      */
@@ -239,10 +261,11 @@ public class HxAuditService {
     public void adminSave(Long adminId, String adminName, Long flowId, Map<String, Object> body) {
         RpHxFlow flow = requireFlow(flowId);
         int st = flow.getStatus();
-        if (st != HxFlowStatus.SUBMITTED && st != HxFlowStatus.SCANNED) {
-            throw new BizException("仅已提交/已回扫单可修正(退回单请教师修改后重交)");
+        if (st != HxFlowStatus.SUBMITTED && st != HxFlowStatus.SCANNED
+                && st != HxFlowStatus.PRECHECK_PASSED) {
+            throw new BizException("仅预审中/预审通过/已回扫单可修正(退回单请教师修改后重交)");
         }
-        String msg = "仅已提交/已回扫单可修正";
+        String msg = "仅预审中/预审通过/已回扫单可修正";
         switch (flow.getFlowType()) {
             case "register" -> {
                 RegisterSaveDTO dto = objectMapper.convertValue(body, RegisterSaveDTO.class);
@@ -270,12 +293,12 @@ public class HxAuditService {
         notifyTeacher(p.getApplyUserId(), "科技处已修正您的" + flowLabel(flow.getFlowType()) + "单",
                 "您的" + flowLabel(flow.getFlowType()) + "单(项目《" + p.getName()
                         + "》)填报数据已被科技处修正,请查看最新内容;若已盖章回扫,原扫描件对应旧数据,"
-                        + "请重新打印盖章回扫。", p.getId(), adminName);
+                        + "请重新打印盖章回扫。", p.getId(), flow.getId(), adminName);
         hxService.saveRecord(flow, HxFlowStatus.ACT_ADMIN_EDIT, adminName, adminId, null);
     }
 
     // ---------- 退回(spec §3.2/决策#18) ----------
-    /** 退回:status 1/2 均可(1=盖章前预检),意见必填,→4;教师通知以便修改重交 */
+    /** 退回:status 1/2/5 均可(1=预审退回),意见必填,→4;教师通知以便修改重交 */
     @Transactional
     public void reject(Long adminId, String adminName, Long flowId, String opinion, boolean isPrecheck) {
         if (opinion == null || opinion.isBlank()) {
@@ -283,15 +306,16 @@ public class HxAuditService {
         }
         RpHxFlow flow = requireFlow(flowId);
         int st = flow.getStatus();
-        if (st != HxFlowStatus.SUBMITTED && st != HxFlowStatus.SCANNED) {
-            throw new BizException("仅已提交/已回扫单可退回");
+        if (st != HxFlowStatus.SUBMITTED && st != HxFlowStatus.SCANNED
+                && st != HxFlowStatus.PRECHECK_PASSED) {
+            throw new BizException("仅预审中/预审通过/已回扫单可退回");
         }
         hxService.transit(flowId, st, HxFlowStatus.REJECTED);
         RpProject p = requireProject(flow.getProjectId());
         notifyTeacher(p.getApplyUserId(), "横向" + flowLabel(flow.getFlowType()) + "单被退回",
                 "您的" + flowLabel(flow.getFlowType()) + "单(项目《" + p.getName() + "》)已被科技处退回,"
                         + "请修改后重新提交(重交后原盖章件作废,需重新盖章回扫)。退回意见:" + opinion,
-                p.getId(), adminName);
+                p.getId(), flow.getId(), adminName);
         hxService.saveRecord(flow, isPrecheck ? HxFlowStatus.ACT_PRECHECK_REJECT : HxFlowStatus.ACT_REJECT,
                 adminName, adminId, opinion);
     }
@@ -356,8 +380,9 @@ public class HxAuditService {
         return p;
     }
 
-    /** 教师通知(SysNotify 直插,isRead=0) */
-    private void notifyTeacher(Long userId, String title, String content, Long projectId, String createBy) {
+    /** 教师通知(SysNotify 直插,isRead=0;flowId=关联流程单,教师端点击通知跳流程详情) */
+    private void notifyTeacher(Long userId, String title, String content, Long projectId,
+                               Long flowId, String createBy) {
         if (userId == null) {
             return;
         }
@@ -366,6 +391,7 @@ public class HxAuditService {
         n.setTitle(title);
         n.setContent(content);
         n.setProjectId(projectId);
+        n.setFlowId(flowId);
         n.setIsRead(0);
         n.setCreateBy(createBy);
         notifyMapper.insert(n);

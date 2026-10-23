@@ -70,6 +70,20 @@
             <el-option label="只读访客" value="viewer" />
           </el-select>
         </el-form-item>
+        <el-form-item label="院部" prop="deptId">
+          <el-select v-model="createForm.deptId" class="w-full" clearable placeholder="选择院部(教师建号建议必选)">
+            <el-option v-for="d in depts" :key="d.id" :label="d.name" :value="d.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="职称" prop="title">
+          <el-select v-model="createForm.title" class="w-full" clearable filterable allow-create
+            placeholder="选择或输入(工号反显/表单带出)">
+            <el-option v-for="t in titles" :key="t" :label="t" :value="t" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="电话" prop="phone">
+          <el-input v-model="createForm.phone" maxlength="20" placeholder="登记表联系电话默认带出" />
+        </el-form-item>
         <el-form-item label="初始密码" prop="password">
           <el-input v-model="createForm.password" type="password" show-password placeholder="8~32 位,含字母与数字" />
         </el-form-item>
@@ -107,6 +121,7 @@
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { createUser, listUsers, resetUserPassword, setUserStatus } from '../../api/system'
+import { listDepts, listDict } from '../../api/hx'
 import { useUserStore } from '../../stores/user'
 
 const userStore = useUserStore()
@@ -139,8 +154,18 @@ async function load() {
 
 /* ---------- 建号 ---------- */
 const createVisible = ref(false)
+const depts = ref([])
+const titles = ref([])
+
+async function loadMeta() {
+  try {
+    depts.value = await listDepts()
+    titles.value = (await listDict('title')).map((x) => x.label)
+  } catch (e) { /* 拦截器已提示 */ }
+}
+
 const createFormRef = ref()
-const createForm = reactive({ username: '', realName: '', role: 'teacher', password: '', confirm: '' })
+const createForm = reactive({ username: '', realName: '', role: 'teacher', password: '', confirm: '', deptId: null, title: '', phone: '' })
 const createRules = {
   username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
   realName: [{ required: true, message: '请输入姓名', trigger: 'blur' }],
@@ -248,7 +273,7 @@ async function saveReset() {
   }
 }
 
-onMounted(load)
+onMounted(() => { load(); loadMeta() })
 </script>
 
 <script>

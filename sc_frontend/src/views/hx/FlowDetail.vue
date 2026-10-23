@@ -15,57 +15,42 @@
         <div class="head-bar">
           <el-steps :active="activeStep" align-center finish-status="success" class="steps">
             <el-step title="填报草稿" />
-            <el-step title="已提交待回扫" />
-            <el-step title="已回扫待审核" />
-            <el-step :title="d.flow.status === 4 ? '已退回' : '审核完成'" :status="d.flow.status === 4 ? 'error' : undefined" />
+            <el-step title="科技处预审" />
+            <el-step title="盖章回扫" />
+            <el-step title="审核" />
+            <el-step :title="d.flow.status === 4 ? '已退回' : '完成'" :status="d.flow.status === 4 ? 'error' : undefined" />
           </el-steps>
           <el-tag :type="statusTag.type" size="large">{{ statusTag.label }} · {{ flowLabel }}</el-tag>
         </div>
       </el-card>
 
       <el-row :gutter="14">
-        <!-- 左:摘要 + 时间线 -->
+        <!-- 左:单据(只读 Sheet,与审批/打印同口径)+ 时间线 -->
         <el-col :span="14">
-          <!-- 数据摘要 -->
-          <el-card shadow="never" class="mb">
-            <template #header>数据摘要</template>
-            <el-descriptions :column="2" border size="small">
-              <el-descriptions-item label="项目名称" :span="2">{{ d.project?.name }}</el-descriptions-item>
-              <el-descriptions-item label="负责人">{{ d.project?.leaderName }}</el-descriptions-item>
-              <el-descriptions-item label="院部">{{ d.project?.deptName || deptName || '—' }}</el-descriptions-item>
-              <template v-if="d.hx">
-                <el-descriptions-item label="项目类型">{{ d.hx.projectType }}</el-descriptions-item>
-                <el-descriptions-item label="合同经费(元)">{{ fmtMoney(d.hx.contractAmount) }}</el-descriptions-item>
-                <el-descriptions-item label="委托单位">{{ d.hx.clientName }}({{ d.hx.clientNature }})</el-descriptions-item>
-                <el-descriptions-item label="合同起止">{{ d.hx.startDate }} 至 {{ d.hx.endDate }}</el-descriptions-item>
+          <el-card shadow="never" class="mb preview-card">
+            <template #header>
+              <div class="bar">
+                <el-radio-group v-if="deliverDocs.length > 1" v-model="curDoc" size="small">
+                  <el-radio-button v-for="doc in deliverDocs" :key="doc.type" :value="doc.type">
+                    {{ doc.label }}
+                  </el-radio-button>
+                </el-radio-group>
+                <span v-else class="doc-title">{{ deliverDocs[0]?.label }}</span>
+              </div>
+            </template>
+            <div class="preview-box">
+              <template v-if="sheetReady && d.flow.flowType === 'register'">
+                <RegisterSheet :model="model" mode="print" :meta="meta" />
               </template>
-              <template v-if="d.flow.flowType === 'change'">
-                <el-descriptions-item label="变更类型" :span="2">{{ d.flow.changeType }}</el-descriptions-item>
-                <el-descriptions-item label="变更内容" :span="2">{{ d.flow.changeContent || '—' }}</el-descriptions-item>
-                <el-descriptions-item v-if="d.flow.newAmount != null" label="变更后经费(元)" :span="2">
-                  {{ fmtMoney(d.flow.newAmount) }}
-                </el-descriptions-item>
-                <el-descriptions-item v-if="d.flow.newEndDate" label="变更后结束时间" :span="2">
-                  {{ String(d.flow.newEndDate).slice(0, 10) }}
-                </el-descriptions-item>
-                <el-descriptions-item v-if="d.newLeaderName" label="变更后负责人" :span="2">
-                  {{ d.newLeaderName }}
-                </el-descriptions-item>
-                <el-descriptions-item label="变更原因" :span="2">{{ d.flow.changeReason || '—' }}</el-descriptions-item>
+              <template v-else-if="sheetReady && d.flow.flowType === 'change'">
+                <ChangeSheet :model="model" mode="print" :meta="meta" />
               </template>
-              <template v-if="d.flow.flowType === 'acceptance'">
-                <el-descriptions-item label="使用经费(元)">{{ fmtMoney(d.flow.usedAmount) }}</el-descriptions-item>
-                <el-descriptions-item label="是否按期完成">{{ d.flow.isOnTime === 1 ? '按期' : '延期' }}</el-descriptions-item>
-                <el-descriptions-item label="成果形式" :span="2">{{ d.flow.outcomeForm || '—' }}</el-descriptions-item>
-                <el-descriptions-item label="成员/学生数">
-                  {{ (d.members || []).filter((m) => m.memberType !== '学生').length }} 人 /
-                  {{ (d.members || []).filter((m) => m.memberType === '学生').length }} 人
-                </el-descriptions-item>
-                <el-descriptions-item label="预算总额(元)">
-                  {{ fmtMoney((d.budgets || []).reduce((s, b) => s + Number(b.amount || 0), 0)) }}
-                </el-descriptions-item>
+              <template v-else-if="sheetReady">
+                <AcceptanceSheet v-if="curDoc !== 'hx_report'" :model="model" mode="print" :meta="meta" />
+                <ReportSheet v-else :model="model" mode="print" :meta="meta" />
               </template>
-            </el-descriptions>
+              <el-empty v-else description="单据加载中" :image-size="70" />
+            </div>
           </el-card>
 
           <!-- 时间线 -->
@@ -104,8 +89,8 @@
           <!-- 扫描件区 -->
           <el-card shadow="never" class="mb">
             <template #header>盖章扫描件</template>
-            <!-- 待回扫:上传 -->
-            <template v-if="d.flow.status === 1">
+            <!-- 预审通过(5):可上传 -->
+            <template v-if="d.flow.status === 5">
               <div class="scan-form">
                 <el-select v-model="scanDocType" placeholder="扫描件类型" size="small" class="scan-select">
                   <el-option v-for="t in scanDocTypes" :key="t" :label="t" :value="t" />
@@ -117,7 +102,7 @@
                   </el-button>
                 </el-upload>
               </div>
-              <div class="tip">盖章后扫描上传;重传同类型会覆盖旧件。全部要求的扫描件上传后进入科技处审核。</div>
+              <div class="tip">预审已通过:请打印单据、线下盖章后扫描上传;重传同类型会覆盖旧件。上传后进入科技处审核。</div>
             </template>
             <!-- 已回扫:列表(查看/下载走附件内容接口) -->
             <template v-else-if="d.flow.status >= 2">
@@ -129,8 +114,10 @@
                 <el-button link size="small" @click="downAtt(a)">下载</el-button>
               </div>
               <el-empty v-if="!scans.length" description="暂无扫描件" :image-size="60" />
-              <div v-if="d.flow.status === 2" class="tip">已回扫,待科技处审核。如需更换盖章件,请先撤回再重新上传。</div>
+              <div v-if="d.flow.status === 2" class="tip">已回扫,待科技处审核。如需更换盖章件,可直接重传覆盖。</div>
             </template>
+            <!-- 预审中(1)/其他:未到盖章阶段 -->
+            <el-empty v-else-if="d.flow.status === 1" description="科技处预审通过后方可打印盖章并上传扫描件" :image-size="70" />
             <el-empty v-else description="提交并线下盖章后上传扫描件" :image-size="70" />
           </el-card>
 
@@ -151,18 +138,22 @@
           <el-card shadow="never">
             <template #header>操作</template>
             <div class="op-row">
-              <el-button v-if="[0, 1, 2, 4].includes(d.flow.status)" type="primary" @click="editEntry">
-                {{ d.flow.status === 0 ? '继续编辑' : '修改填报' }}
+              <el-button v-if="[0, 1, 2, 4, 5].includes(d.flow.status)" type="primary" @click="editEntry">
+                {{ d.flow.status === 0 ? '继续编辑' : d.flow.status === 4 ? '修改重交' : '修改填报' }}
               </el-button>
               <el-button v-if="d.flow.status === 1" @click="doWithdraw('撤回后回到草稿,可修改后重新提交,确定撤回?')">
                 撤回(回草稿)
               </el-button>
-              <el-button v-if="d.flow.status === 2" @click="doWithdraw('撤回后回到已提交状态,可重新上传扫描件,确定撤回?')">
-                撤回(回已提交)
+              <el-button v-if="d.flow.status === 2" @click="doWithdraw('撤回后回到预审通过状态,可重新上传扫描件(不须再预审),确定撤回?')">
+                撤回(回待盖章)
               </el-button>
-              <el-button v-if="d.flow.status === 4" type="primary" @click="editEntry">修改重交</el-button>
-              <!-- 不改数据直接重交(4→1,旧待签+扫描件作废,spec §3.2) -->
+              <!-- 不改数据直接重交(4→1,旧扫描件作废,spec §3.2) -->
               <el-button v-if="d.flow.status === 4" @click="doResubmit">直接重交</el-button>
+              <!-- 预审通过(5)改数据后重新提交:5→1 重新预审(尚未传件,无作废) -->
+              <el-button v-if="d.flow.status === 5" @click="doResubmit">重新提交(重新预审)</el-button>
+              <!-- 取消变更(五轮反馈):在途变更终止,作废后可发新变更;审核中(2)须先撤回 -->
+              <el-button v-if="d.flow.flowType === 'change' && [0, 1, 4, 5].includes(d.flow.status)"
+                type="danger" plain @click="doCancelChange">取消变更</el-button>
               <el-button @click="$router.push('/hx')">返回列表</el-button>
             </div>
           </el-card>
@@ -173,26 +164,36 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  downloadAttachment, downloadDeliver, flowDetail, listDepts, resubmit, uploadScan, withdraw
+  cancelChange, downloadAttachment, downloadDeliver, flowDetail, resubmit, uploadScan, withdraw
 } from '../../api/hx'
+import { buildSheetModel } from '../../composables/sheetModel'
+import AcceptanceSheet from '../../components/hxsheet/AcceptanceSheet.vue'
+import ChangeSheet from '../../components/hxsheet/ChangeSheet.vue'
+import RegisterSheet from '../../components/hxsheet/RegisterSheet.vue'
+import ReportSheet from '../../components/hxsheet/ReportSheet.vue'
 
 const route = useRoute()
 const router = useRouter()
 
 const loading = ref(false)
 const d = ref(null)          // FlowDetailVO
-const deptName = ref('')     // 详情未带 deptName 时的兜底(按 deptId 查院部名)
 const scanDocType = ref('')
 const scanning = ref(false)
 
+/* 只读单据(与审批/打印同口径):sheetReady 守卫防空 model 崩子树 */
+const sheetReady = ref(false)
+const curDoc = ref('hx_acceptance')
+const model = reactive({})
+const meta = reactive({ orig: {} })
+
 const ACTION_LABEL = {
   submit: '提交', withdraw: '撤回', upload_scan: '上传扫描件', resubmit: '重新提交',
-  approve: '审批通过', verify: '验收通过', reject: '退回', precheck_reject: '盖章前预检退回',
-  admin_edit: '科技处修正'
+  precheck: '科技处预审通过', approve: '审批通过', verify: '验收通过', reject: '退回',
+  precheck_reject: '预审退回', admin_edit: '科技处修正'
 }
 
 /** 流程类型对应允许的扫描件类型(与后端 validateScanDocType 同口径) */
@@ -206,14 +207,16 @@ const flowId = computed(() => Number(route.params.flowId))
 const flowLabel = computed(() => ({ register: '登记表', change: '变更表', acceptance: '验收单' }[d.value?.flow?.flowType] || '流程单'))
 const statusTag = computed(() => ({
   0: { label: '草稿', type: 'info' },
-  1: { label: '已提交待回扫', type: 'warning' },
-  2: { label: '已回扫待审核', type: 'primary' },
+  1: { label: '科技处预审中', type: 'warning' },
+  2: { label: '已回扫·审核中', type: 'primary' },
   3: { label: '审核通过', type: 'success' },
-  4: { label: '已退回', type: 'danger' }
+  4: { label: '已退回', type: 'danger' },
+  5: { label: '预审通过·待盖章回扫', type: 'primary' }
 }[d.value?.flow?.status] || { label: '—', type: 'info' }))
 const activeStep = computed(() => {
   const s = d.value?.flow?.status ?? 0
-  return s === 4 ? 2 : s
+  // 0草稿/1预审/5盖章回扫/2审核/3完成;4 退回停在其所处阶段
+  return s === 4 ? 3 : s === 5 ? 2 : s === 2 ? 3 : s
 })
 const records = computed(() => [...(d.value?.records || [])].reverse())
 const scans = computed(() => (d.value?.attachments || []).filter((a) => a.bizType === 'hx_scan'))
@@ -251,7 +254,6 @@ const dataStale = computed(() => {
     && String(f.updateTime) > String(f.scanTime)
 })
 
-const fmtMoney = (v) => (v === null || v === undefined ? '—' : Number(v).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
 const fmtTime = (t) => (t || '').replace('T', ' ').slice(0, 16)
 
 /** 退回态:最近一条退回留痕意见(d.records 为 orderByAsc(id) 最旧在前,取末元素=最新一次退回) */
@@ -264,15 +266,21 @@ const rejectOpinion = computed(() => {
 
 async function load() {
   loading.value = true
+  sheetReady.value = false
   try {
     d.value = await flowDetail(flowId.value)
-    if (!d.value.project?.deptName && d.value.project?.deptId) {
-      const depts = await listDepts()
-      deptName.value = depts.find((x) => x.id === d.value.project.deptId)?.name || ''
-    }
+    const built = await buildSheetModel(d.value, d.value.flow.flowType)
+    Object.keys(model).forEach((k) => delete model[k])
+    Object.assign(model, built.model)
+    Object.keys(meta).forEach((k) => delete meta[k])
+    Object.assign(meta, built.meta)
+    curDoc.value = deliverDocs.value[0]?.type || ''
     scanDocType.value = scanDocTypes.value[0] || ''
+  } catch (e) {
+    console.error('[FlowDetail] 加载失败', e)
   } finally {
     loading.value = false
+    sheetReady.value = true
   }
 }
 
@@ -350,28 +358,46 @@ async function doWithdraw(msg) {
   }
 }
 
-/** 退回单不改数据直接重交(4→1):重渲待签双出,旧待签+旧扫描件作废(spec §3.2) */
+/** 退回单直接重交(4→1,旧扫描件作废)/预审通过后改数据重新提交(5→1 重新预审) */
 async function doResubmit() {
+  const isRejected = d.value?.flow?.status === 4
   try {
-    await ElMessageBox.confirm(
-      '直接重交将按当前数据重新生成待签文件,原盖章件作废(需重新盖章回扫),确定重交?',
+    await ElMessageBox.confirm(isRejected
+      ? '直接重交将按当前数据重新提交预审,原盖章件作废(需重新盖章回扫),确定重交?'
+      : '重新提交后本单将回到科技处预审(当前数据生效,预审通过前不可上传扫描件),确定提交?',
       '提示', { type: 'warning' })
   } catch { return }
   try {
     await resubmit(flowId.value)
-    ElMessage.success('已重交,请下载待签 Word 打印盖章')
+    ElMessage.success(isRejected ? '已重交,请等待科技处审核' : '已重新提交,请等待科技处预审')
     await load()
   } catch (e) {
     /* 拦截器已提示 */
   }
 }
 
-/** 审批前编辑入口(0/1/2/4):跳对应填单页 */
+/** 审批前编辑入口(0/1/2/4/5):跳对应填单页 */
 function editEntry() {
   const t = d.value?.flow?.flowType
   if (t === 'register') router.push(`/hx/register/${flowId.value}`)
   else if (t === 'change') router.push(`/hx/change/${flowId.value}`)
   else if (t === 'acceptance') router.push(`/hx/acceptance/${flowId.value}`)
+}
+
+/** 取消在途变更:作废流程单+扫描件(变更未生效项目数据不变),作废后可发新变更 */
+async function doCancelChange() {
+  try {
+    await ElMessageBox.confirm(
+      '取消后本变更单及其扫描件作废(变更未生效,项目数据不变),取消后可重新发起新变更,确定取消?',
+      '取消变更', { type: 'warning', confirmButtonText: '确定取消', cancelButtonText: '再想想' })
+  } catch { return }
+  try {
+    await cancelChange(flowId.value)
+    ElMessage.success('变更已取消')
+    router.replace('/hx')
+  } catch (e) {
+    /* 拦截器已提示(审核中会提示先撤回) */
+  }
 }
 
 onMounted(load)
@@ -398,6 +424,30 @@ export default { name: 'FlowDetail' }
 
 .steps {
   flex: 1;
+}
+
+.bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.doc-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.preview-card :deep(.el-card__body) {
+  padding: 10px;
+}
+
+.preview-box {
+  height: calc(100vh - 320px);
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  padding: 12px 8px;
 }
 
 .tl-action {

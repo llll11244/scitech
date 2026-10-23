@@ -43,7 +43,7 @@
           <template #default="{ row }">
             <!-- 登记阶段 -->
             <template v-if="row.auditStatus < 2">
-              <template v-if="[0, 1, 2, 4].includes(registerFlow(row)?.status)">
+              <template v-if="[0, 1, 2, 4, 5].includes(registerFlow(row)?.status)">
                 <el-button link type="primary" @click="$router.push(`/hx/register/${registerFlow(row).flowId}`)">{{ registerFlow(row).status === 0 ? '继续填报' : '修改填报' }}</el-button>
                 <el-button v-if="registerFlow(row).status === 0" link type="danger" @click="removeDraft(registerFlow(row).flowId)">删除草稿</el-button>
               </template>
@@ -56,15 +56,18 @@
               <el-button v-else-if="inflightChange(row)" link type="primary"
                 @click="$router.push(`/hx/flow/${inflightChange(row).flowId}`)">变更单详情</el-button>
               <el-button v-else link type="primary" @click="$router.push(`/hx/change?projectId=${row.projectId}`)">发起变更</el-button>
+              <!-- 取消在途变更(审核中先撤回):作废后可发新变更 -->
+              <el-button v-if="inflightChange(row) && [0, 1, 4, 5].includes(inflightChange(row).status)"
+                link type="danger" @click="cancelChangeOf(row)">取消变更</el-button>
 
-              <el-button v-if="acceptanceFlow(row) && [0, 1, 2, 4].includes(acceptanceFlow(row).status)"
+              <el-button v-if="acceptanceFlow(row) && [0, 1, 2, 4, 5].includes(acceptanceFlow(row).status)"
                 link type="primary"
                 @click="$router.push(`/hx/acceptance/${acceptanceFlow(row).flowId}`)">{{ acceptanceFlow(row).status === 0 ? '继续验收单' : '修改验收单' }}</el-button>
               <el-button v-else-if="acceptanceFlow(row)" link type="primary"
                 @click="$router.push(`/hx/flow/${acceptanceFlow(row).flowId}`)">验收单详情</el-button>
               <el-button v-else-if="row.status !== '结题'" link type="primary" @click="$router.push(`/hx/acceptance?projectId=${row.projectId}`)">发起验收</el-button>
             </template>
-            <el-button link type="primary" @click="$router.push(`/hx/funding?projectId=${row.projectId}`)">到账</el-button>
+            <el-button v-if="row.auditStatus >= 2" link type="primary" @click="$router.push(`/hx/funding?projectId=${row.projectId}`)">到账</el-button>
             <el-button v-if="row.auditStatus >= 2" link type="primary" @click="openDetail(row)">详情</el-button>
           </template>
         </el-table-column>
@@ -82,7 +85,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { myProjects, deleteDraft } from '../../api/hx'
+import { myProjects, cancelChange, deleteDraft } from '../../api/hx'
 
 const router = useRouter()
 const loading = ref(false)
@@ -120,20 +123,26 @@ watch(() => filtered.value.length, (n) => {
 })
 
 const registerFlow = (row) => row.flows?.find((f) => f.flowType === 'register')
-/** 在途变更单(0/1/2/4;3 通过后可再发新单) */
+/** 在途变更单(0/1/2/4/5;3 通过后可再发新单) */
 const inflightChange = (row) =>
-  row.flows?.find((f) => f.flowType === 'change' && [0, 1, 2, 4].includes(f.status))
+  row.flows?.find((f) => f.flowType === 'change' && [0, 1, 2, 4, 5].includes(f.status))
 /** 验收单每项目至多一张(任何状态) */
 const acceptanceFlow = (row) => row.flows?.find((f) => f.flowType === 'acceptance')
 
-/** 行状态 tag:已结题 > 被退回(任一在途单 status=4,醒目提示修改重交) > 登记中(audit<2) > 变更中 > 验收中 > 在研 */
+/** 行状态 tag:已结题 > 被退回(任一在途单 status=4) > 登记中(audit<2,细分预审/盖章/审核) > 变更中 > 验收中 > 在研 */
 const FLOW_NAMES = { register: '登记', change: '变更', acceptance: '验收' }
 function stateOf(row) {
   if (row.status === '结题') return { label: '已结题', type: 'info' }
   const rejected = row.flows?.find((f) => f.status === 4)
   if (rejected) return { label: `${FLOW_NAMES[rejected.flowType] || '流程'}单被退回`, type: 'danger' }
   if (row.auditStatus < 2) {
-    return { label: row.auditStatus === 0 ? '登记草稿' : '登记中', type: 'warning' }
+    if (row.auditStatus === 0) return { label: '登记草稿', type: 'info' }
+    const reg = registerFlow(row)
+    const s = reg?.status
+    if (s === 1) return { label: '登记·预审中', type: 'warning' }
+    if (s === 5) return { label: '登记·待盖章回扫', type: 'primary' }
+    if (s === 2) return { label: '登记·审核中', type: 'primary' }
+    return { label: '登记中', type: 'warning' }
   }
   if (inflightChange(row)) return { label: '变更中', type: 'warning' }
   if (acceptanceFlow(row) && acceptanceFlow(row).status !== 3) return { label: '验收中', type: 'warning' }
@@ -151,7 +160,7 @@ function lastActive(row) {
 /** 名称点击入口:登记草稿回填报表单,其余打开最关心的一张流程单详情 */
 function openDetail(row) {
   const reg = registerFlow(row)
-  if (row.auditStatus < 2 && reg && [0, 1, 2, 4].includes(reg.status)) {
+  if (row.auditStatus < 2 && reg && [0, 1, 2, 4, 5].includes(reg.status)) {
     router.push(`/hx/register/${reg.flowId}`)
     return
   }
@@ -169,6 +178,21 @@ async function removeDraft(flowId) {
   try {
     await deleteDraft(flowId)
     ElMessage.success('草稿已删除')
+    load()
+  } catch (e) { /* 拦截器已提示 */ }
+}
+
+/** 取消在途变更(审核中后端拒并提示先撤回):作废流程单+扫描件,可再发新变更 */
+async function cancelChangeOf(row) {
+  const f = inflightChange(row)
+  if (!f) return
+  try {
+    await ElMessageBox.confirm('取消后本变更单及其扫描件作废(变更未生效,项目数据不变),确定取消?',
+      '取消变更', { type: 'warning', confirmButtonText: '确定取消', cancelButtonText: '再想想' })
+  } catch { return }
+  try {
+    await cancelChange(f.flowId)
+    ElMessage.success('变更已取消')
     load()
   } catch (e) { /* 拦截器已提示 */ }
 }

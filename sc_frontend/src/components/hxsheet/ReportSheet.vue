@@ -108,7 +108,8 @@ function autosize(e) {
   const el = e ? e.target : taRef.value
   if (!el) return
   el.style.height = 'auto'
-  el.style.height = el.scrollHeight + 'px'
+  // 限高 70vh:超出出滚动条(打印态按段落全量渲染,不受此限)
+  el.style.height = Math.min(el.scrollHeight, Math.round(window.innerHeight * 0.7)) + 'px'
   emit('change')
 }
 function insertChapter(c) {
@@ -131,6 +132,8 @@ onMounted(async () => {
 .rep-area {
   width: 100%;
   min-height: 420px;
+  max-height: 70vh;
+  overflow-y: auto;
   margin-top: 4px;
 }
 </style>

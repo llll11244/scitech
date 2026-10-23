@@ -2,10 +2,19 @@
   <div class="chg-page">
     <el-alert v-if="rejected" type="warning" :closable="false" class="topbar"
       :title="'退回单:修改后请点击「保存并重交」。退回意见:' + (rejectOpinion || '见时间线')" />
+    <el-alert v-else-if="flowStatus === 5" type="success" :closable="false" class="topbar"
+      title="预审已通过:请打印盖章并到流程详情上传扫描件;若修改了数据,须点「重新提交」重新预审。" />
+    <el-alert v-else-if="[1, 2].includes(flowStatus)" type="info" :closable="false" class="topbar"
+      :title="flowStatus === 1
+        ? '预审中:审批通过前仍可修改数据,保存即生效,科技处预审看到的是最新内容。'
+        : '已回扫审核中:审批通过前仍可修改数据(保存即生效);若与盖章扫描件不一致,请重新打印盖章回扫。'" />
 
     <SheetToolbar v-model:show-hints="showHints">
-      <el-button v-if="canEdit" size="small" :loading="saving" @click="save">保存草稿</el-button>
-      <el-button v-if="canEdit" size="small" type="primary" @click="submit">{{ rejected ? '保存并重交' : '提交' }}</el-button>
+      <el-button size="small" @click="goBack">返回</el-button>
+      <el-button v-if="canEdit" size="small" :loading="saving" @click="save">{{ flowStatus === 0 ? '保存草稿' : '保存' }}</el-button>
+      <el-button v-if="[0, 4, 5].includes(flowStatus)" size="small" type="primary" @click="submit">
+        {{ rejected ? '保存并重交' : flowStatus === 5 ? '重新提交(重新预审)' : '提交' }}
+      </el-button>
       <el-button v-if="flowStatus >= 1" size="small" type="primary" plain @click="print">打印 / 导出 PDF</el-button>
     </SheetToolbar>
 
@@ -55,7 +64,7 @@ const form = reactive({
 })
 
 const mode = computed(() => (canEdit.value ? 'edit' : 'print'))
-const canEdit = computed(() => [0, 1, 2, 4].includes(flowStatus.value))
+const canEdit = computed(() => [0, 1, 2, 4, 5].includes(flowStatus.value))
 
 function collectForm() {
   return {
@@ -115,8 +124,10 @@ async function submit() {
   }
   /* 提交确认(HTML转正口径) */
   const tip = rejected.value
-    ? '重交后原盖章件作废,需重新盖章回扫。'
-    : '提交后仍可修改,但打印版必须为最终修改版。'
+    ? ''   // 修改重交(退回态):仅提示确认数据;作废口径已在退回 alert/直接重交确认里
+    : flowStatus.value === 5
+      ? '重新提交后本单将回到科技处预审(预审通过前不可上传扫描件);打印版必须为最终修改版。'
+      : '提交后进入科技处预审,预审通过后方可打印盖章回扫;提交后仍可修改,但打印版必须为最终修改版。'
   try {
     await ElMessageBox.confirm(tip + '请确认当前填报数据无误。', '确认提交',
       { confirmButtonText: '确认提交', cancelButtonText: '再检查一下', type: 'info' })
@@ -126,12 +137,12 @@ async function submit() {
   submitting.value = true
   try {
     await doSave(false)
-    if (rejected.value) {
+    if (rejected.value || flowStatus.value === 5) {
       await resubmit(form.flowId)
-      ElMessage.success('已重交;请重新打印签章并回扫(原盖章件作废)')
+      ElMessage.success(rejected.value ? '已重交,请等待科技处审核' : '已重新提交,请等待科技处预审')
     } else {
       await submitChange(form.flowId)
-      ElMessage.success('已提交;请在流程详情打印待签件')
+      ElMessage.success('已提交,等待科技处预审;预审通过后可在流程详情打印盖章并上传扫描件')
     }
     router.replace(`/hx/flow/${form.flowId}`)
   } catch (e) {
@@ -139,6 +150,12 @@ async function submit() {
   } finally {
     submitting.value = false
   }
+}
+
+/** 返回上级:浏览器历史优先,无历史(直链进入)回项目列表 */
+function goBack() {
+  if (window.history.length > 1) router.back()
+  else router.replace('/hx')
 }
 
 function print() {
@@ -173,7 +190,7 @@ function fillOrigFromDetail(d) {
 
 async function loadDraft(flowId) {
   const d = await flowDetail(flowId)
-  if (![0, 1, 2, 4].includes(d.flow.status)) {
+  if (![0, 1, 2, 4, 5].includes(d.flow.status)) {
     router.replace(`/hx/flow/${flowId}`)
     return
   }

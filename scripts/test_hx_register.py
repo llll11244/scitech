@@ -100,9 +100,19 @@ def main():
 
     # 4. 回扫上传(假 PDF 字节)→2;重传覆盖:生效件仍恰 1(旧件作废不入列表,设计§3.2)
     fake = b"%PDF-1.4 fake scan"
+    # 预审流转(四轮反馈):1 态拒——预审通过后方可上传;precheck(1→5)后可传
     r = requests.post(BASE + "/hx/%d/scan" % fid, headers=t, data={"docType": "登记表"},
                       files={"file": ("scan.pdf", fake)}).json()
-    check("上传扫描件", r.get("code") == 0, str(r))
+    check("预审前上传扫描件被拒", r.get("code") != 0 and "预审" in (r.get("msg") or ""),
+          str(r.get("msg"))[:60])
+    r = requests.post(BASE + "/hx/%d/precheck" % fid, headers=admin, json={}).json()
+    d = detail(fid, t)
+    check("科技处预审通过(1→5)", r.get("code") == 0 and d["flow"]["status"] == 5,
+          "status=%s" % d["flow"]["status"])
+    check("时间线含 precheck", "precheck" in [x["action"] for x in d["records"]], "")
+    r = requests.post(BASE + "/hx/%d/scan" % fid, headers=t, data={"docType": "登记表"},
+                      files={"file": ("scan.pdf", fake)}).json()
+    check("预审后上传扫描件", r.get("code") == 0, str(r))
     r2 = requests.post(BASE + "/hx/%d/scan" % fid, headers=t, data={"docType": "登记表"},
                       files={"file": ("scan2.pdf", fake)}).json()
     d = detail(fid, t)

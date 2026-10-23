@@ -44,9 +44,9 @@
             <el-tag :type="STATUS[row.status]?.type || 'info'" size="small">
               {{ STATUS[row.status]?.label || row.status }}
             </el-tag>
-            <!-- status=1=盖章前,可预检退回(决策#18) -->
+            <!-- status=1=待预审(草稿不进本列表) -->
             <el-tag v-if="row.status === 1" size="small" type="warning" effect="plain" class="ml-4">
-              可预检
+              待预审
             </el-tag>
           </template>
         </el-table-column>
@@ -64,7 +64,7 @@
         <el-table-column label="操作" width="90" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click.stop="open(row)">
-              {{ row.status === 1 || row.status === 2 ? '审批' : '查看' }}
+              {{ [1, 2, 5].includes(row.status) ? '审批' : '查看' }}
             </el-button>
           </template>
         </el-table-column>
@@ -117,10 +117,11 @@ watch(() => filtered.value.length, (n) => {
 
 const STATUS = {
   0: { label: '草稿', type: 'info' },
-  1: { label: '已提交待回扫', type: 'warning' },
-  2: { label: '已回扫待审核', type: 'primary' },
+  1: { label: '预审中', type: 'warning' },
+  2: { label: '已回扫·审核中', type: 'primary' },
   3: { label: '已通过', type: 'success' },
-  4: { label: '已退回', type: 'danger' }
+  4: { label: '已退回', type: 'danger' },
+  5: { label: '预审通过·待盖章回扫', type: 'primary' }
 }
 const TYPE_TAG = {
   register: { label: '登记表', type: 'primary' },

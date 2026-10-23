@@ -14,7 +14,7 @@ export const saveAcceptanceDraft = (data) => request.post('/hx/acceptance/draft'
 export const submitAcceptance = (flowId) => request.post('/hx/acceptance/submit', { flowId })
 
 /* ---------- 流程操作 ---------- */
-/** 撤回:已提交(1)→草稿(0);已回扫(2)→已提交(1) */
+/** 撤回:预审中(1)→草稿(0);已回扫(2)→预审通过(5,重盖章不须再预审) */
 export const withdraw = (flowId) => request.post(`/hx/${flowId}/withdraw`)
 /** 盖章扫描件上传(重传同类型覆盖) */
 export const uploadScan = (flowId, file, docType) => {
@@ -28,6 +28,8 @@ export const uploadScan = (flowId, file, docType) => {
 }
 /** 删草稿(仅 status=0;登记草稿连带删项目/成员/预算) */
 export const deleteDraft = (flowId) => request.delete(`/hx/${flowId}`)
+/** 取消在途变更单(status∈{0,1,4,5};审核中先撤回):作废流程单+扫描件,通知科技处 */
+export const cancelChange = (flowId) => request.post(`/hx/${flowId}/cancel`)
 
 /* ---------- 查询 ---------- */
 export const myProjects = () => request.get('/hx/my')
@@ -78,6 +80,8 @@ export const auditList = (params) => request.get('/hx/audit', { params })
 /** 通过:验收流程须传 verifiedAmount(核定到账,元) */
 export const reviewFlow = (flowId, verifiedAmount) =>
   request.post(`/hx/${flowId}/review`, verifiedAmount === undefined ? {} : { verifiedAmount })
+/** 预审通过:仅 status=1,1→5;通过后教师方可打印盖章上传扫描件 */
+export const precheckPass = (flowId) => request.post(`/hx/${flowId}/precheck`)
 /** 退回:意见必填;isPrecheck 仅 status=1 可选(盖章前预检,前端守语义) */
 export const rejectFlow = (flowId, opinion, isPrecheck = false) =>
   request.post(`/hx/${flowId}/reject`, { opinion, isPrecheck })

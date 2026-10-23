@@ -86,6 +86,7 @@ CREATE TABLE IF NOT EXISTS sys_notify (
   title VARCHAR(255) NOT NULL,
   content VARCHAR(1000) DEFAULT NULL,
   project_id BIGINT DEFAULT NULL COMMENT '跳转关联项目',
+  flow_id BIGINT DEFAULT NULL COMMENT '跳转关联流程单→rp_hx_flow(横向流程通知;到账类为 null)',
   is_read TINYINT NOT NULL DEFAULT 0,
   create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
   update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -100,21 +101,6 @@ CREATE TABLE IF NOT EXISTS sys_notify (
 -- 启用版唯一(tpl_type+status=1)无 partial index,由应用层事务保证
 -- ---------------------------------------------------------------
 
-CREATE TABLE IF NOT EXISTS sys_template (
-  id BIGINT NOT NULL AUTO_INCREMENT,
-  tpl_type VARCHAR(32) NOT NULL COMMENT 'hx_register/hx_change/hx_acceptance/hx_report',
-  version INT NOT NULL COMMENT '版本号,递增',
-  file_path VARCHAR(500) NOT NULL COMMENT 'upload/templates/下相对路径',
-  placeholder_check TEXT COMMENT '上传时校验通过的占位符清单(JSON)',
-  status TINYINT NOT NULL DEFAULT 1 COMMENT '1启用 0历史版本',
-  remark VARCHAR(255) DEFAULT NULL,
-  create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
-  update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  create_by VARCHAR(64) DEFAULT NULL,
-  deleted TINYINT DEFAULT 0,
-  PRIMARY KEY (id),
-  UNIQUE KEY uk_type_version (tpl_type, version)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='PDF模板表';
 
 -- ---------------------------------------------------------------
 -- 业务公共主表+横向扩展(决策#27/#30:15列最小真公共主表)
@@ -331,6 +317,15 @@ SET @col = (SELECT IF(COUNT(*) = 0,
   'ALTER TABLE rp_hx_project ADD COLUMN leader_phone VARCHAR(20) DEFAULT NULL COMMENT ''联系电话(默认带出本人手机号,教师可改)'' AFTER leader_email',
   'SELECT 1') FROM information_schema.COLUMNS
   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'rp_hx_project' AND COLUMN_NAME = 'leader_phone');
+PREPARE stmt FROM @col;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+-- 四轮反馈(2026-10-23):通知跳转关联流程单(教师端点通知直达流程详情)
+SET @col = (SELECT IF(COUNT(*) = 0,
+  'ALTER TABLE sys_notify ADD COLUMN flow_id BIGINT DEFAULT NULL COMMENT ''跳转关联流程单→rp_hx_flow(横向流程通知;到账类为 null)'' AFTER project_id',
+  'SELECT 1') FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'sys_notify' AND COLUMN_NAME = 'flow_id');
 PREPARE stmt FROM @col;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;

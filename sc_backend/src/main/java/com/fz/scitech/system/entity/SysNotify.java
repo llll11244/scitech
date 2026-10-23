@@ -28,6 +28,9 @@ public class SysNotify {
     /** 跳转关联项目 */
     private Long projectId;
 
+    /** 跳转关联流程单→rp_hx_flow.id(横向流程通知;到账类通知为 null) */
+    private Long flowId;
+
     /** 0未读 1已读 */
     private Integer isRead;
 

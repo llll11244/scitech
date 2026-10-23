@@ -54,6 +54,17 @@ public class HxAdminController {
     }
 
     /**
+     * 预审通过(2026-10-23 预审流转):仅 status=1,1→5;通知教师打印盖章后上传扫描件。
+     * 预审通过前教师不可上传盖章扫描件(HxService.uploadScan 门槛)。
+     */
+    @PostMapping("/{flowId}/precheck")
+    public Result<Void> precheck(@PathVariable Long flowId, HttpServletRequest request) {
+        requireAdmin(request);
+        auditService.precheckPass(uid(request), username(request), flowId);
+        return Result.ok(null);
+    }
+
+    /**
      * admin 修正教师填报数据(HTML转正 决策③):仅 status∈{1,2},任意表单字段;
      * body=对应流程保存 DTO 同构 JSON(与教师保存接口同结构);留痕 admin_edit+通知教师。
      */

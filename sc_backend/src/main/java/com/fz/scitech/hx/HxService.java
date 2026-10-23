@@ -26,11 +26,11 @@ import com.fz.scitech.hx.mapper.RpMemberMapper;
 import com.fz.scitech.hx.mapper.RpProjectMapper;
 import com.fz.scitech.platform.attachment.RpAttachment;
 import com.fz.scitech.platform.attachment.mapper.RpAttachmentMapper;
-import com.fz.scitech.system.entity.SysConfig;
 import com.fz.scitech.system.entity.SysDept;
 import com.fz.scitech.system.entity.SysDict;
+import com.fz.scitech.system.entity.SysNotify;
 import com.fz.scitech.system.entity.SysUser;
-import com.fz.scitech.system.mapper.SysConfigMapper;
+import com.fz.scitech.system.mapper.SysNotifyMapper;
 import com.fz.scitech.system.mapper.SysDeptMapper;
 import com.fz.scitech.system.mapper.SysDictMapper;
 import com.fz.scitech.system.mapper.SysUserMapper;
@@ -90,7 +90,7 @@ public class HxService {
     private final SysDeptMapper deptMapper;
     private final SysUserMapper userMapper;
     private final SysDictMapper dictMapper;
-    private final SysConfigMapper configMapper;
+    private final SysNotifyMapper notifyMapper;
     private final MgmtFeePolicy mgmtFeePolicy;
     private final ObjectMapper objectMapper;
 
@@ -101,7 +101,7 @@ public class HxService {
                      RpHxFlowRecordMapper recordMapper, RpMemberMapper memberMapper, RpBudgetMapper budgetMapper,
                      RpAttachmentMapper attachmentMapper, RpFundingRecordMapper fundingMapper,
                      SysDeptMapper deptMapper, SysUserMapper userMapper, SysDictMapper dictMapper,
-                     SysConfigMapper configMapper, MgmtFeePolicy mgmtFeePolicy, ObjectMapper objectMapper) {
+                     SysNotifyMapper notifyMapper, MgmtFeePolicy mgmtFeePolicy, ObjectMapper objectMapper) {
         this.projectMapper = projectMapper;
         this.hxMapper = hxMapper;
         this.flowMapper = flowMapper;
@@ -113,7 +113,7 @@ public class HxService {
         this.deptMapper = deptMapper;
         this.userMapper = userMapper;
         this.dictMapper = dictMapper;
-        this.configMapper = configMapper;
+        this.notifyMapper = notifyMapper;
         this.mgmtFeePolicy = mgmtFeePolicy;
         this.objectMapper = objectMapper;
     }
@@ -234,8 +234,8 @@ public class HxService {
         lenCheck(h.getClientName(), 255, "委托单位名称");
         lenCheck(h.getLeaderEmail(), 128, "电子邮箱");
         lenCheck(h.getLeaderPhone(), 20, "联系电话");
-        lenCheck(h.getProjectSummary(), 800, "项目简介");
-        lenCheck(h.getProgressPlan(), 800, "项目计划进度");
+        lenCheck(h.getProjectSummary(), 300, "项目简介");
+        lenCheck(h.getProgressPlan(), 300, "项目计划进度");
     }
 
     /** 规则R1(HTML转正 决策④):非「不受限」科目合计=合同经费;提交/admin 代改强制,draft 允许半成品 */
@@ -430,13 +430,13 @@ public class HxService {
         }
     }
 
-    /** 同项目在途变更单唯一:status 0/1/2/4 任一存在即拒(编辑自身除外) */
+    /** 同项目在途变更单唯一:status 0/1/2/4/5 任一存在即拒(编辑自身除外) */
     private void guardChangeUnique(Long projectId, Long excludeFlowId) {
         Long count = flowMapper.selectCount(new LambdaQueryWrapper<RpHxFlow>()
                 .eq(RpHxFlow::getProjectId, projectId)
                 .eq(RpHxFlow::getFlowType, "change")
                 .in(RpHxFlow::getStatus, HxFlowStatus.DRAFT, HxFlowStatus.SUBMITTED,
-                        HxFlowStatus.SCANNED, HxFlowStatus.REJECTED)
+                        HxFlowStatus.SCANNED, HxFlowStatus.REJECTED, HxFlowStatus.PRECHECK_PASSED)
                 .ne(excludeFlowId != null, RpHxFlow::getId, excludeFlowId));
         if (count != null && count > 0) {
             throw new BizException("该项目已有进行中的变更单");
@@ -581,14 +581,14 @@ public class HxService {
     }
 
     // ---------- 撤回(三流程共用) ----------
-    /** 已提交(1)→草稿(0);已回扫(2)→已提交(1,重传前须先撤回重盖章场景)。留痕=ACT_WITHDRAW 入时间线 */
+    /** 预审中(1)→草稿(0);已回扫(2)→预审通过(5,撤回重盖章场景不须再预审)。留痕=ACT_WITHDRAW 入时间线 */
     @Transactional
     public void withdraw(Long uid, String username, Long flowId) {
         RpHxFlow flow = ownedFlow(uid, flowId);
         if (flow.getStatus() == HxFlowStatus.SUBMITTED) {
             transit(flowId, HxFlowStatus.SUBMITTED, HxFlowStatus.DRAFT);
         } else if (flow.getStatus() == HxFlowStatus.SCANNED) {
-            transit(flowId, HxFlowStatus.SCANNED, HxFlowStatus.SUBMITTED);
+            transit(flowId, HxFlowStatus.SCANNED, HxFlowStatus.PRECHECK_PASSED);
         } else {
             throw new BizException("当前状态不可撤回");
         }
@@ -597,25 +597,74 @@ public class HxService {
 
     // ---------- 退回修改重交(三流程共用,Task24) ----------
     /**
-     * 退回单重交(spec §3.2):status 4→1;旧扫描件一并作废(需重新盖章回扫)。
-     * HTML转正(决策①):不再重渲待签 docx,教师重交后自行重新打印;教师改数据走
-     * saveXxxDraft(0/1/2/4 可编辑),不改也可直接重交。
+     * 重新提交:退回单 4→1(旧扫描件一并作废,须重新盖章回扫);预审通过(5)改数据后 5→1 重新预审
+     * (尚未传件,无作废)。HTML转正(决策①):不重渲待签 docx,教师重交后自行重新打印。
      */
     @Transactional
     public void resubmit(Long uid, String username, Long flowId) {
         RpHxFlow flow = ownedFlow(uid, flowId);
-        if (flow.getStatus() != HxFlowStatus.REJECTED) {
-            throw new BizException("仅退回单可重交");
+        if (flow.getStatus() == HxFlowStatus.REJECTED) {
+            transit(flowId, HxFlowStatus.REJECTED, HxFlowStatus.SUBMITTED);
+            invalidateOld(flow, "scan", null, "hx_scan");   // 旧扫描件作废(重交须重新盖章回扫)
+        } else if (flow.getStatus() == HxFlowStatus.PRECHECK_PASSED) {
+            transit(flowId, HxFlowStatus.PRECHECK_PASSED, HxFlowStatus.SUBMITTED);
+        } else {
+            throw new BizException("仅退回单/预审通过单可重新提交");
         }
-        transit(flowId, HxFlowStatus.REJECTED, HxFlowStatus.SUBMITTED);
-        invalidateOld(flow, "scan", null, "hx_scan");   // 旧扫描件作废(重交须重新盖章回扫)
         saveRecord(flow, HxFlowStatus.ACT_RESUBMIT, username, uid, null);
+    }
+
+    // ---------- 取消变更(五轮反馈:教师可终止在途变更,不被「发起后只能走完」锁死) ----------
+    /**
+     * 取消在途变更单:status∈{0,1,4,5}(2=已回扫审核中,须先撤回到待盖章再取消;3=已生效不可取消)。
+     * 流程单+留痕逻辑删(作废口径),扫描件一并作废;变更未生效项目数据不动;
+     * 通知 admin 周知;条件删封并发竞态(0 行=状态已被迁移)。
+     */
+    @Transactional
+    public void cancelChange(Long uid, String username, Long flowId) {
+        RpHxFlow flow = ownedFlow(uid, flowId);
+        if (!"change".equals(flow.getFlowType())) {
+            throw new BizException("仅变更单可取消");
+        }
+        int st = flow.getStatus();
+        if (st == HxFlowStatus.SCANNED) {
+            throw new BizException("已回扫审核中,请先撤回到待盖章再取消(或联系科技处退回)");
+        }
+        if (st == HxFlowStatus.APPROVED) {
+            throw new BizException("变更已审核生效,不可取消");
+        }
+        int rows = flowMapper.delete(new LambdaQueryWrapper<RpHxFlow>()
+                .eq(RpHxFlow::getId, flowId)
+                .in(RpHxFlow::getStatus, HxFlowStatus.DRAFT, HxFlowStatus.SUBMITTED,
+                        HxFlowStatus.REJECTED, HxFlowStatus.PRECHECK_PASSED));
+        if (rows == 0) {
+            throw new BizException("状态已变化,请刷新后重试");
+        }
+        invalidateOld(flow, "scan", null, "hx_scan");
+        recordMapper.delete(new LambdaQueryWrapper<RpHxFlowRecord>()
+                .eq(RpHxFlowRecord::getFlowId, flowId));
+        // 周知科技处(变更被教师取消,审批列表该单消失)
+        SysUser admin = userMapper.selectOne(new LambdaQueryWrapper<SysUser>()
+                .eq(SysUser::getRole, "admin").orderByAsc(SysUser::getId).last("limit 1"));
+        if (admin != null) {
+            RpProject p = projectMapper.selectById(flow.getProjectId());
+            SysNotify n = new SysNotify();
+            n.setUserId(admin.getId());
+            n.setTitle("横向变更单已被教师取消");
+            n.setContent("教师 " + username + " 取消了项目《" + (p == null ? flow.getProjectId() : p.getName())
+                    + "》的在途变更申请(变更未生效,项目数据不变)。");
+            n.setProjectId(flow.getProjectId());
+            n.setIsRead(0);
+            n.setCreateBy(username);
+            notifyMapper.insert(n);
+        }
     }
 
     // ---------- 回扫 ----------
     /**
-     * 盖章扫描件上传:status 1→2;已回扫(2)重传=按 docType 覆盖,旧件作废(决策#34-④ 每类仅最新一份生效)。
+     * 盖章扫描件上传:预审通过(5)→已回扫(2);已回扫(2)重传=按 docType 覆盖,旧件作废(决策#34-④)。
      * 存盘 upload/hx/{pid}/scan/{flowId}/scan_{ts}.{ext}(目录独立于渲染件)。
+     * 2026-10-23 预审流转:1 态拒——科技处预审通过教师方可上传盖章扫描件。
      */
     @Transactional
     public Long uploadScan(Long uid, String username, Long flowId, MultipartFile file, String docType) {
@@ -629,12 +678,12 @@ public class HxService {
             throw new BizException("扫描件格式仅支持:" + String.join("/", SCAN_EXTS));
         }
         int st = flow.getStatus();
-        if (st != HxFlowStatus.SUBMITTED && st != HxFlowStatus.SCANNED) {
-            throw new BizException("仅已提交状态可上传扫描件");
+        if (st != HxFlowStatus.PRECHECK_PASSED && st != HxFlowStatus.SCANNED) {
+            throw new BizException("科技处预审通过后方可上传盖章扫描件");
         }
         validateScanDocType(flow.getFlowType(), docType);
-        if (st == HxFlowStatus.SUBMITTED) {
-            transit(flowId, HxFlowStatus.SUBMITTED, HxFlowStatus.SCANNED);
+        if (st == HxFlowStatus.PRECHECK_PASSED) {
+            transit(flowId, HxFlowStatus.PRECHECK_PASSED, HxFlowStatus.SCANNED);
         } else {
             // 已回扫(2)重传覆盖分支:条件占位封竞态——审批通过(2→3)抢先则 0 行即拒(决策#34-②)
             guardStatus(flowId, HxFlowStatus.SCANNED, "状态已变化,请刷新后重试");
@@ -772,7 +821,6 @@ public class HxService {
                 .eq(RpAttachment::getProjectId, flow.getProjectId()).orderByDesc(RpAttachment::getId)));
         vo.setRecords(recordMapper.selectList(new LambdaQueryWrapper<RpHxFlowRecord>()
                 .eq(RpHxFlowRecord::getFlowId, flowId).orderByAsc(RpHxFlowRecord::getId)));
-        vo.setDeliverPdfVisible(readConfig("deliver_pdf_visible"));
         // 验收单:到账累计只读带出(金额校验 R4 基准,教师不可填)
         if ("acceptance".equals(flow.getFlowType())) {
             vo.setReceivedTotal(receivedTotal(flow.getProjectId()));
@@ -991,12 +1039,12 @@ public class HxService {
         guardStatus(flowId, HxFlowStatus.DRAFT, rejectMsg);
     }
 
-    /** 草稿/退回态条件占位(guardDraft 放宽版,Task24 退回修改重交):编辑允许 status∈{0,4},WHERE IN 验行数 */
+    /** 审批前条件占位(guardDraft 放宽版):编辑允许 status∈{0,1,2,4,5},WHERE IN 验行数 */
     private void guardEditable(Long flowId, String rejectMsg) {
         int rows = flowMapper.update(null, new LambdaUpdateWrapper<RpHxFlow>()
                 .eq(RpHxFlow::getId, flowId)
                 .in(RpHxFlow::getStatus, HxFlowStatus.DRAFT, HxFlowStatus.SUBMITTED,
-                        HxFlowStatus.SCANNED, HxFlowStatus.REJECTED)
+                        HxFlowStatus.SCANNED, HxFlowStatus.REJECTED, HxFlowStatus.PRECHECK_PASSED)
                 .set(RpHxFlow::getUpdateTime, LocalDateTime.now()));
         if (rows == 0) {
             throw new BizException(rejectMsg);
@@ -1155,12 +1203,6 @@ public class HxService {
             SysUser u = userMapper.selectById(p.getApplyUserId());
             p.setLeaderPhone(u == null ? null : u.getPhone());
         }
-    }
-
-    private String readConfig(String key) {
-        SysConfig c = configMapper.selectOne(new LambdaQueryWrapper<SysConfig>()
-                .eq(SysConfig::getConfigKey, key).last("limit 1"));
-        return c == null ? "false" : c.getConfigValue();
     }
 
     /** yyyy-MM-dd 宽松解析(包级:HxAuditService admin 代改复用);非法/null→null */

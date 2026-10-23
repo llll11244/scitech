@@ -113,6 +113,7 @@ public class SysUserAdminController {
         u.setRole(body.role);
         u.setDeptId(body.deptId);
         u.setPhone(body.phone);
+        u.setTitle(body.title);
         u.setStatus(1);
         u.setCreateBy(attr(request));
         try {
@@ -195,6 +196,7 @@ public class SysUserAdminController {
         private String password;
         private Long deptId;
         private String phone;
+        private String title;
     }
 
     @Data

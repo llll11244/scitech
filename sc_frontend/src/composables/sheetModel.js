@@ -35,6 +35,12 @@ export async function buildSheetModel(d, flowType) {
     meta.hxRegisterDate = d.hx.hxRegisterDate || ''
     meta.leaderPhone = o.leaderPhone
     meta.mgmtRate = await getConfig('hx_mgmt_fee_rate')
+    // 预算按字典六科目骨架化(缺科目补空行):打印态与 admin 修正编辑态版式稳定,
+    // rowspan=8 恒成立(库中实存可能只存部分科目,直接渲染会错位)
+    const skeleton = bs.map((x) => {
+      const hit = (d.budgets || []).find((b) => b.subject === x.label)
+      return hit ? { ...hit } : { subject: x.label, amount: null, unrestricted: 0 }
+    })
     return {
       meta,
       model: {
@@ -43,7 +49,7 @@ export async function buildSheetModel(d, flowType) {
         deptId: d.project.deptId,
         hx: { ...d.hx, startDate: o.startDate, endDate: o.endDate },
         members: (d.members || []).map((m) => ({ ...m })),
-        budgets: (d.budgets || []).map((b) => ({ ...b }))
+        budgets: skeleton
       }
     }
   }
@@ -66,12 +72,15 @@ export async function buildSheetModel(d, flowType) {
     }
   }
 
-  const [of, pt, cn2] = await Promise.all([
-    listDict('hx_outcome_form'), listDict('hx_project_type'), listDict('hx_client_nature')
+  const [of, pt, cn2, tt, ds] = await Promise.all([
+    listDict('hx_outcome_form'), listDict('hx_project_type'), listDict('hx_client_nature'),
+    listDict('title'), listDepts()
   ])
   meta.dictOutcomeForm = of.map((x) => x.label)
   meta.dictProjectType = pt.map((x) => x.label)
   meta.dictClientNature = cn2.map((x) => x.label)
+  meta.dictTitle = tt.map((x) => x.label)
+  meta.depts = ds
   meta.receivedTotal = d.receivedTotal ?? null
   meta.verifiedAmountWan = d.hx.verifiedAmount ? toWan(d.hx.verifiedAmount) : ''
   const verify = (d.records || []).filter((x) => x.action === 'verify').pop()

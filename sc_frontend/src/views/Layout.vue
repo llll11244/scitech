@@ -41,10 +41,6 @@
             <el-icon><Collection /></el-icon>
             <span>字典管理</span>
           </el-menu-item>
-          <el-menu-item v-if="userStore.isAdmin" index="/template">
-            <el-icon><Files /></el-icon>
-            <span>模板管理</span>
-          </el-menu-item>
           <el-menu-item v-if="userStore.isAdmin" index="/admin/users">
             <el-icon><User /></el-icon>
             <span>用户管理</span>

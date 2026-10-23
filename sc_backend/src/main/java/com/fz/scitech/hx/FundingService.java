@@ -285,7 +285,7 @@ public class FundingService {
     }
 
     // ---------- 通用 ----------
-    /** 教师通知(SysNotify 直插,isRead=0;与 HxAuditService 同口径) */
+    /** 教师通知(SysNotify 直插,isRead=0;与 HxAuditService 同口径;到账类通知无流程单,flowId=null) */
     private void notifyTeacher(Long userId, String title, String content, Long projectId, String createBy) {
         if (userId == null) {
             return;

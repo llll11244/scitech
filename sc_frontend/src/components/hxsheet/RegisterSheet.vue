@@ -96,7 +96,11 @@
               <template v-else>{{ m.employeeNo }}</template></td>
             <td><input v-if="mode === 'edit'" v-model.trim="m.name" class="cellinput" maxlength="64" placeholder="姓名">
               <template v-else>{{ m.name }}</template></td>
-            <td><input v-if="mode === 'edit'" v-model.trim="m.unit" class="cellinput" maxlength="255" placeholder="所在单位/学院">
+            <!-- 校内单位=院部列表下拉(职能部门同样在院部列表中维护);校外单位无字典,保持自由文本 -->
+            <td><select v-if="mode === 'edit'" v-model="m.unit" class="cellinput">
+                <option value="">选择单位</option>
+                <option v-for="dp in meta.depts" :key="dp.id" :value="dp.name">{{ dp.name }}</option>
+              </select>
               <template v-else>{{ m.unit }}</template></td>
             <td><input v-if="mode === 'edit'" v-model.trim="m.title" class="cellinput" list="title-list" maxlength="32" placeholder="职称">
               <template v-else>{{ m.title }}</template></td>
@@ -118,7 +122,8 @@
               <template v-else>{{ m.name }}</template></td>
             <td><input v-if="mode === 'edit'" v-model.trim="m.unit" class="cellinput" maxlength="255" placeholder="所在单位">
               <template v-else>{{ m.unit }}</template></td>
-            <td><input v-if="mode === 'edit'" v-model.trim="m.title" class="cellinput" list="title-list" maxlength="32" placeholder="职务">
+            <!-- 校外职务=自由文本(企业头衔千差万别,不走职称字典) -->
+            <td><input v-if="mode === 'edit'" v-model.trim="m.title" class="cellinput" maxlength="32" placeholder="职务">
               <template v-else>{{ m.title }}</template></td>
             <td><input v-if="mode === 'edit'" v-model.trim="m.major" class="cellinput" maxlength="64" placeholder="专业">
               <template v-else>{{ m.major }}</template></td>
@@ -128,12 +133,12 @@
           </tr>
           <tr v-if="mode === 'edit'" class="addrow"><td colspan="6"><a class="scr rowbtn" @click="addOuter()">+ 添加校外人员</a></td></tr>
 
-          <!-- ===== C/D 简介/进度 ===== -->
+          <!-- ===== C/D 简介/进度(标签竖排居中,与成员分工同款) ===== -->
           <tr>
-            <td class="lbl">项目简介</td>
+            <td class="lbl vlbl">项目简介</td>
             <td colspan="6">
-              <AutoTextarea v-model="model.hx.projectSummary" :maxlength="800" :mode="mode"
-                min-h="24mm" placeholder="项目背景/目标内容/技术路线/预期成果" @blur="touch" />
+              <AutoTextarea v-model="model.hx.projectSummary" :maxlength="300" :mode="mode"
+                min-h="24mm" placeholder="项目背景/目标内容/技术路线/预期成果(200-300 字)" @blur="touch" />
               <details v-if="mode === 'edit'" class="hint">
                 <summary>示例:项目简介怎么写(建议 200-300 字,要求信息完整)</summary>
                 <ul>
@@ -146,10 +151,10 @@
             </td>
           </tr>
           <tr>
-            <td class="lbl">项目计划进度</td>
+            <td class="lbl vlbl">项目计划进度</td>
             <td colspan="6">
-              <AutoTextarea v-model="model.hx.progressPlan" :maxlength="800" :mode="mode"
-                min-h="22mm" placeholder="按时间段排布的工作计划" @blur="touch" />
+              <AutoTextarea v-model="model.hx.progressPlan" :maxlength="300" :mode="mode"
+                min-h="22mm" placeholder="按时间段排布的工作计划(200-300 字)" @blur="touch" />
               <details v-if="mode === 'edit'" class="hint">
                 <summary>示例:计划进度怎么写(建议 200-300 字)</summary>
                 <ul>
@@ -162,9 +167,9 @@
             </td>
           </tr>
 
-          <!-- ===== E 经费预算 ===== -->
+          <!-- ===== E 经费预算(标签竖排居中) ===== -->
           <tr>
-            <td class="lbl" rowspan="8">经费预算(元)</td>
+            <td class="lbl vlbl" rowspan="8">经费预算<span class="tc">(元)</span></td>
             <td class="para" colspan="6" style="min-height:14mm">所填报的各项信息,内容完全真实有效。
               <span style="float:right">项目负责人(签字):&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;年&emsp;月&emsp;日</span>
               <details v-if="mode === 'edit'" class="hint">
@@ -212,10 +217,11 @@
           <tr>
             <td class="chk" colspan="3">是否收取管理费:<CheckGroup v-model="chargeFlag"
               :options="['是', '否']" :mode="mode" /></td>
-            <td colspan="4" class="num">收取管理费金额:{{ chargeFlag === '是' ? money(mgmtFee) : '' }} 元
-              <span v-if="chargeFlag === '是'" class="scr">(比例换算:{{ meta.mgmtRate }} % × 合同经费
-                {{ money(model.hx.contractAmount) }},自动计算;比例由科技处在系统参数中统一设定)</span>
-              <div class="hint">是否收取管理费,请根据审批流程如实填写;比例由科技处统一设定,教师不可修改,金额=合同经费×比例自动换算。</div>
+            <td colspan="4" class="num">
+              <div>收取管理费金额:{{ chargeFlag === '是' ? money(mgmtFee) : '' }} 元</div>
+              <div v-if="chargeFlag === '是'" class="scr">(比例换算:{{ meta.mgmtRate }} % × 合同经费
+                {{ money(model.hx.contractAmount) }},自动计算;比例由科技处在系统参数中统一设定)</div>
+              <div v-if="mode === 'edit'" class="hint">是否收取管理费,请根据审批流程如实填写;比例由科技处统一设定,教师不可修改,金额=合同经费×比例自动换算。</div>
             </td>
           </tr>
 
@@ -351,15 +357,15 @@ const budgetTotal = computed(() => budgetRows.value
   .reduce((s, b) => s + (Number(b.amount) || 0), 0))
 
 /**
- * 科目行恒按字典六科目渲染(版式稳定,rowspan=8 前提):
- * 编辑态=model.budgets(页面已按字典骨架初始化);打印态(审批页/打印页数据来自库中实存行,
- * 可能只存了部分科目)按字典骨架合并实存值,缺的科目显示空白——与演示稿口径一致。
+ * 科目行恒按字典六科目渲染(版式稳定,rowspan=8 前提):model.budgets 由 sheetModel/
+ * RegisterPage 加载时已按字典骨架初始化(缺科目补空行),此处直接取;兜底仍按字典骨架合并
+ * (防 meta 迟到或旧调用方未骨架化导致行数≠6 错位)。
  */
 const budgetRows = computed(() => {
-  if (props.mode === 'edit') return props.model.budgets || []
+  const rows = props.model.budgets || []
   const dict = props.meta.dictBudgetSubject || []
-  if (!dict.length) return props.model.budgets || []
-  return dict.map((s) => (props.model.budgets || []).find((b) => b.subject === s)
+  if (!dict.length || rows.length >= dict.length) return rows
+  return dict.map((s) => rows.find((b) => b.subject === s)
     || { subject: s, amount: null, unrestricted: 0 })
 })
 

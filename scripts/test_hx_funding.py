@@ -102,6 +102,7 @@ def register_confirmed(t, admin, name):
     """全链造一个已确认(在研)项目:登记→提交→回扫→审批通过;返回 (flowId, projectId)"""
     fid = post("/hx/register/draft", t, reg_payload(name))["data"]
     assert post("/hx/register/submit", t, {"flowId": fid}).get("code") == 0, name + " 登记提交失败"
+    assert post("/hx/%d/precheck" % fid, admin, {}).get("code") == 0, name + " 登记预审失败"
     assert scan(t, fid, "登记表").get("code") == 0, name + " 登记回扫失败"
     assert post("/hx/%d/review" % fid, admin, {}).get("code") == 0, name + " 登记审批失败"
     return fid, detail(fid, t)["project"]["id"]
@@ -135,6 +136,7 @@ def main():
                         "amount": "100000.00", "sortNo": 1}]}
     afid = post("/hx/acceptance/draft", t, acc)["data"]
     assert post("/hx/acceptance/submit", t, {"flowId": afid}).get("code") == 0, "乙 验收提交失败"
+    assert post("/hx/%d/precheck" % afid, admin, {}).get("code") == 0, "乙 验收预审失败"
     assert scan(t, afid, "验收登记表").get("code") == 0, "乙 验收回扫失败"
     assert post("/hx/%d/review" % afid, admin, {"verifiedAmount": 100000.00}).get("code") == 0, "乙 验收审批失败"
     assert detail(afid, t)["project"]["status"] == "结题", "乙 未结题"

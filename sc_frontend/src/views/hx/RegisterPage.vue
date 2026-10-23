@@ -2,16 +2,23 @@
   <div class="reg-page">
     <el-alert v-if="rejected" type="warning" :closable="false" class="topbar"
       :title="'退回单:修改后请点击「保存并重交」。退回意见:' + (rejectOpinion || '见时间线')" />
-    <el-alert v-else-if="flowStatus === 1 || flowStatus === 2" type="info" :closable="false" class="topbar"
-      title="已提交:审批通过前仍可直接修改数据;打印请用右上「打印」,盖章扫描件与最新数据的差异请留意提示。" />
+    <el-alert v-else-if="flowStatus === 5" type="success" :closable="false" class="topbar"
+      title="预审已通过:请打印盖章并到流程详情上传扫描件;若修改了数据,须点「重新提交」重新预审。" />
+    <el-alert v-else-if="[1, 2].includes(flowStatus)" type="info" :closable="false" class="topbar"
+      :title="flowStatus === 1
+        ? '预审中:审批通过前仍可修改数据,科技处预审看到的是最新内容。'
+        : '已回扫审核中:审批通过前仍可修改数据;盖章扫描件与最新数据的差异请留意提示。'" />
 
     <SheetToolbar v-model:show-hints="showHints">
+      <el-button size="small" @click="goBack">返回</el-button>
       <el-upload v-if="canEdit" :show-file-list="false" :http-request="doUploadContract"
         :accept="'.pdf,.png,.jpg,.jpeg'">
         <el-button size="small">{{ contractFile ? '重传合同扫描件' : '上传合同扫描件' }}</el-button>
       </el-upload>
-      <el-button v-if="canEdit" size="small" :loading="saving" @click="save">保存草稿</el-button>
-      <el-button v-if="canEdit" size="small" type="primary" @click="submit">{{ rejected ? '保存并重交' : '提交' }}</el-button>
+      <el-button v-if="canEdit" size="small" :loading="saving" @click="save">{{ flowStatus === 0 ? '保存草稿' : '保存' }}</el-button>
+      <el-button v-if="[0, 4, 5].includes(flowStatus)" size="small" type="primary" @click="submit">
+        {{ rejected ? '保存并重交' : flowStatus === 5 ? '重新提交(重新预审)' : '提交' }}
+      </el-button>
       <el-button v-if="flowStatus >= 1" size="small" type="primary" plain @click="print">打印 / 导出 PDF</el-button>
     </SheetToolbar>
 
@@ -31,8 +38,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import {
-  flowDetail, getConfig, listDepts, listDict, resubmit, saveRegisterDraft, submitRegister,
-  uploadContract
+  flowDetail, getConfig, listDepts, listDict, lookupMember, resubmit, saveRegisterDraft,
+  submitRegister, uploadContract
 } from '../../api/hx'
 import { useUserStore } from '../../stores/user'
 import RegisterSheet from '../../components/hxsheet/RegisterSheet.vue'
@@ -69,7 +76,7 @@ const form = reactive({
   budgets: []
 })
 
-const canEdit = computed(() => [0, 1, 2, 4].includes(flowStatus.value))
+const canEdit = computed(() => [0, 1, 2, 4, 5].includes(flowStatus.value))
 
 function collectForm() {
   const members = form.members
@@ -134,9 +141,12 @@ async function submit() {
     return
   }
   /* 提交确认(HTML转正口径):审批前仍可改,但打印签章版必须为最终修改版 */
+  const resubmitting = rejected.value || flowStatus.value === 5
   const tip = rejected.value
-    ? '重交后原盖章件作废,需重新盖章回扫。'
-    : '提交后仍可修改,但打印版必须为最终修改版。'
+    ? ''   // 修改重交(退回态):仅提示确认数据;作废口径已在退回 alert/直接重交确认里
+    : flowStatus.value === 5
+      ? '重新提交后本单将回到科技处预审(预审通过前不可上传扫描件);打印版必须为最终修改版。'
+      : '提交后进入科技处预审,预审通过后方可打印盖章回扫;提交后仍可修改,但打印版必须为最终修改版。'
   try {
     await ElMessageBox.confirm(tip + '请确认当前填报数据无误。', '确认提交',
       { confirmButtonText: '确认提交', cancelButtonText: '再检查一下', type: 'info' })
@@ -150,12 +160,12 @@ async function submit() {
     } else {
       await saveRegisterDraft(payload)
     }
-    if (rejected.value) {
+    if (resubmitting) {
       await resubmit(form.flowId)
-      ElMessage.success('已重交;请重新打印签章并回扫(原盖章件作废)')
+      ElMessage.success(rejected.value ? '已重交,请等待科技处审核' : '已重新提交,请等待科技处预审')
     } else {
       await submitRegister(form.flowId)
-      ElMessage.success('已提交;请在流程详情打印待签件(浏览器打印 A4/另存 PDF)')
+      ElMessage.success('已提交,等待科技处预审;预审通过后可在流程详情打印盖章并上传扫描件')
     }
     router.replace(`/hx/flow/${form.flowId}`)
   } catch (e) {
@@ -167,6 +177,12 @@ async function submit() {
 
 function print() {
   window.open(`/print/register/${form.flowId}`, '_blank')
+}
+
+/** 返回上级:浏览器历史优先,无历史(直链进入)回项目列表 */
+function goBack() {
+  if (window.history.length > 1) router.back()
+  else router.replace('/hx')
 }
 
 async function doUploadContract(opt) {
@@ -187,7 +203,7 @@ async function doUploadContract(opt) {
 
 async function loadDraft(flowId) {
   const d = await flowDetail(flowId)
-  if (![0, 1, 2, 4].includes(d.flow.status)) {
+  if (![0, 1, 2, 4, 5].includes(d.flow.status)) {
     router.replace(`/hx/flow/${flowId}`)
     return
   }
@@ -234,6 +250,16 @@ onMounted(async () => {
   form.leaderName = userStore.userInfo?.realName || ''
   /* 联系电话默认带出本人手机号(/users/me),存量回填时以项目存值优先 */
   form.hx.leaderPhone = userStore.userInfo?.phone || ''
+  /* 校内人员首行默认=项目负责人本人(工号反显同源:姓名/院部/职称);编辑回填不动 */
+  if (!route.params.flowId && !form.members[0]?.name) {
+    try {
+      const me = await lookupMember(userStore.userInfo?.username || '')
+      if (me) {
+        form.members[0] = { memberType: '教师', employeeNo: me.username || '', name: me.name || '',
+          unit: me.deptName || '', title: me.title || '', major: '', duty: '' }
+      }
+    } catch (e) { /* 静默:查无则留空行手填 */ }
+  }
   getConfig('hx_mgmt_fee_rate').then((v) => { meta.mgmtRate = v == null ? null : Number(v) })
   const [ds, pt, cn, tt, bs] = await Promise.all([
     listDepts(), listDict('hx_project_type'), listDict('hx_client_nature'), listDict('title'),

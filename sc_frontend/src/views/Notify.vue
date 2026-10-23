@@ -74,7 +74,7 @@ async function refreshUnread() {
   } catch (e) { /* 静默 */ }
 }
 
-/** 点击消息:标已读;教师可跳转关联申报详情 */
+/** 点击消息:标已读;带流程单的通知跳流程详情(教师/admin 均可访问 FlowDetail) */
 async function open(n) {
   if (n.isRead === 0) {
     try {
@@ -83,8 +83,8 @@ async function open(n) {
       refreshUnread()
     } catch (e) { /* 已读失败不阻塞跳转 */ }
   }
-  if (n.projectId && userStore.isTeacher) {
-    router.push(`/declare/detail/${n.projectId}`)
+  if (n.flowId) {
+    router.push(`/hx/flow/${n.flowId}`)
   }
 }
 

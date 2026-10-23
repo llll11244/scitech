@@ -25,12 +25,6 @@ const routes = [
         component: () => import('../views/Notify.vue'),
         meta: { title: '消息通知', roles: ['teacher', 'admin'] }
       },
-      {
-        path: 'template',
-        name: 'TemplateManage',
-        component: () => import('../views/platform/TemplateManage.vue'),
-        meta: { title: '模板管理', roles: ['admin'] }
-      },
       /* ==== N3 教师端横向项目(teacher+admin) ==== */
       {
         path: 'hx',

@@ -3,8 +3,11 @@
     <el-card shadow="never">
       <template #header>
         <div class="bar">
-          <span>到账明细(只读)</span>
-          <el-select v-model="projectId" filterable placeholder="选择项目" class="w-360" @change="load">
+          <div class="bar-left">
+            <el-button size="small" @click="goBack">返回</el-button>
+            <span>到账明细(只读)</span>
+          </div>
+          <el-select v-model="projectId" filterable placeholder="选择项目(仅已立项)" class="w-360" @change="load">
             <el-option v-for="p in projects" :key="p.projectId" :label="p.name" :value="p.projectId" />
           </el-select>
         </div>
@@ -36,7 +39,7 @@
         </el-table>
         <el-empty v-if="!loading && !records.length" description="暂无到账记录" :image-size="70" />
       </template>
-      <el-empty v-else description="请选择要查看的项目" :image-size="70" />
+      <el-empty v-else description="暂无已立项项目:到账信息在项目登记审核通过(立项)后开放查看" :image-size="70" />
     </el-card>
   </div>
 </template>
@@ -47,10 +50,11 @@
 -->
 <script setup>
 import { onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { myProjects, teacherFunding } from '../../api/hx'
 
 const route = useRoute()
+const router = useRouter()
 const loading = ref(false)
 const projects = ref([])
 const projectId = ref(null)
@@ -58,6 +62,12 @@ const records = ref([])
 const total = ref(0)
 
 const fmtMoney = (v) => (v === null || v === undefined ? '—' : Number(v).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
+
+/** 返回上级:浏览器历史优先,无历史回项目列表 */
+function goBack() {
+  if (window.history.length > 1) router.back()
+  else router.replace('/hx')
+}
 
 async function load() {
   if (!projectId.value) return
@@ -73,13 +83,13 @@ async function load() {
 
 onMounted(async () => {
   const rows = (await myProjects()) || []
-  // 到账视角=已入台账项目优先;未确认项目也可查(科技处可能先录款)
-  projects.value = rows
+  // 到账仅对立项(audit_status>=2)后的教师端开放(四轮反馈:立项前不显示到账入口/数据)
+  projects.value = rows.filter((p) => p.auditStatus >= 2)
   const qpid = Number(route.query.projectId)
-  if (qpid && rows.some((p) => p.projectId === qpid)) {
+  if (qpid && projects.value.some((p) => p.projectId === qpid)) {
     projectId.value = qpid
-  } else if (rows.length) {
-    projectId.value = rows[0].projectId
+  } else if (projects.value.length) {
+    projectId.value = projects.value[0].projectId
   }
   await load()
 })

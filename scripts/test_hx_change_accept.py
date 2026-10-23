@@ -149,6 +149,40 @@ def main():
                                      "changeContent": "x", "changeReason": "y"})
     check("不存在项目被拒", r.get("code") != 0, str(r.get("msg")))
 
+    # 9. 取消变更(五轮反馈):在途变更可终止;作废后唯一约束解除可再发新变更;审核中(2)拒
+    admin = login("admin", "admin123")
+    fake = b"%PDF-1.4 fake scan"
+
+    def scan(headers, fid, doc_type):
+        return requests.post(BASE + "/hx/%d/scan" % fid, headers=headers,
+                             data={"docType": doc_type}, files={"file": ("scan.pdf", fake)}).json()
+
+    # 前置:登记走完立项(预审→回扫→通过)
+    assert post("/hx/%d/precheck" % fid, admin, {}).get("code") == 0, "取消段:登记预审失败"
+    assert scan(t, fid, "登记表").get("code") == 0, "取消段:登记回扫失败"
+    assert post("/hx/%d/review" % fid, admin, {}).get("code") == 0, "取消段:登记审批失败"
+
+    # 第一张变更单(cfid,委托内容)提交后取消 → 详情不可见、可再发新变更
+    assert post("/hx/change/draft", t, dict(chg, flowId=cfid)).get("code") == 0, "取消段:变更重存失败"
+    assert post("/hx/change/submit", t, {"flowId": cfid}).get("code") == 0, "取消段:变更提交失败"
+    r = post("/hx/%d/cancel" % cfid, t, {})
+    check("在途变更取消成功", r.get("code") == 0, str(r.get("msg"))[:60])
+    r = requests.get(BASE + "/hx/%d" % cfid, headers=t, timeout=30).json()
+    check("取消后流程单不可见", r.get("code") != 0, str(r.get("code")))
+    r = post("/hx/change/draft", t, {"projectId": pid, "changeType": "委托内容",
+                                     "changeContent": "取消后重新发起", "changeReason": "重新规划"})
+    check("取消后可再发新变更", r.get("code") == 0, str(r.get("msg"))[:60])
+    cfid2 = r.get("data")
+    assert post("/hx/change/submit", t, {"flowId": cfid2}).get("code") == 0, "取消段:新变更提交失败"
+    assert post("/hx/%d/precheck" % cfid2, admin, {}).get("code") == 0, "取消段:新变更预审失败"
+    assert scan(t, cfid2, "变更表").get("code") == 0, "取消段:新变更回扫失败"
+    r = post("/hx/%d/cancel" % cfid2, t, {})
+    check("审核中(2)取消被拒", r.get("code") != 0 and "撤回" in (r.get("msg") or ""),
+          str(r.get("msg"))[:60])
+    # 收尾:新变更撤回到待盖章后取消,恢复项目干净态
+    requests.post(BASE + "/hx/%d/withdraw" % cfid2, headers=t)
+    assert post("/hx/%d/cancel" % cfid2, t, {}).get("code") == 0, "取消段:收尾取消失败"
+
     failed = [n for n, ok in results if not ok]
     print("\n%d/%d 通过" % (len(results) - len(failed), len(results)))
     if failed:

@@ -104,6 +104,11 @@ def main():
     }
     fid_a = post("/hx/register/draft", t, reg_a)["data"]
     assert post("/hx/register/submit", t, {"flowId": fid_a}).get("code") == 0, "A 登记提交失败"
+    # 预审流转(四轮反馈):1 态 scan 拒;precheck 1→5 后可传;草稿不进审批列表
+    r = scan(t, fid_a, "登记表")
+    check("A 预审前上传扫描件被拒", r.get("code") != 0 and "预审" in (r.get("msg") or ""), str(r.get("msg"))[:60])
+    r = post("/hx/%d/precheck" % fid_a, admin, {})
+    check("A 预审通过(1→5)", r.get("code") == 0, str(r.get("msg"))[:60])
     assert scan(t, fid_a, "登记表").get("code") == 0, "A 登记回扫失败"
     pid_a = detail(fid_a, t)["project"]["id"]
 
@@ -115,6 +120,28 @@ def main():
           and row.get("deptName") == "智能制造与装备学院" and row.get("submitTime"),
           str(row)[:120] if row else "未找到 flowId=%d" % fid_a)
     check("审批列表教师被拒", get("/hx/audit", t).get("code") != 0, "")
+
+    # 1b. 预审流转(四轮反馈):草稿不进审批列表;5 态教师改数据后 resubmit 5→1 重新预审
+    reg_d = dict(reg_a, name="审批测试-草稿不可见演练")
+    fid_d = post("/hx/register/draft", t, reg_d)["data"]
+    r = get("/hx/audit?flowType=register", admin)
+    ids = [x.get("flowId") for x in (r.get("data") or [])]
+    check("草稿不进审批列表", fid_d not in ids, "fid_d=%s" % fid_d)
+    assert post("/hx/register/submit", t, {"flowId": fid_d}).get("code") == 0, "D 登记提交失败"
+    r = get("/hx/audit?flowType=register", admin)
+    ids = [x.get("flowId") for x in (r.get("data") or [])]
+    check("提交后进审批列表", fid_d in ids, "fid_d=%s" % fid_d)
+    assert post("/hx/%d/precheck" % fid_d, admin, {}).get("code") == 0, "D 预审失败"
+    r = post("/hx/register/draft", t, dict(reg_d, flowId=fid_d, name="审批测试-草稿不可见演练(改)"))
+    d5 = detail(fid_d, t)
+    check("预审通过态(5)教师可改数据", r.get("code") == 0 and d5["project"]["name"].endswith("(改)")
+          and d5["flow"]["status"] == 5, "status=%s" % d5["flow"]["status"])
+    r = post("/hx/%d/resubmit" % fid_d, t, {})
+    check("5 态重新提交回预审(5→1)", r.get("code") == 0 and detail(fid_d, t)["flow"]["status"] == 1,
+          str(r.get("msg"))[:60])
+    r = post("/hx/%d/resubmit" % fid_d, t, {})
+    check("1 态重复 resubmit 拒", r.get("code") != 0, str(r.get("msg"))[:40])
+    requests.post(BASE + "/hx/%d/withdraw" % fid_d, headers=t)
 
     # 2. 登记通过:入台账+编号+立项日期+通知
     r = post("/hx/%d/review" % fid_a, admin, {})
@@ -155,6 +182,7 @@ def main():
           and bj["deptId"] == 9 and dec(bj["contractAmount"]) == Decimal("355000.00")
           and str(bj["endDate"]) == "2027-12-31",
           str(bj)[:140])
+    assert post("/hx/%d/precheck" % cfid, admin, {}).get("code") == 0, "A 变更预审失败"
     assert scan(t, cfid, "变更表").get("code") == 0, "A 变更回扫失败"
     r = post("/hx/%d/review" % cfid, admin, {})
     d = detail(cfid, admin)
@@ -211,6 +239,7 @@ def main():
     d = detail(afid, admin)
     check("admin代改验收单留痕", r.get("code") == 0 and "admin_edit" in [x["action"] for x in d["records"]]
           and "修订" in (d["flow"].get("acceptSummary") or ""), str(r.get("msg"))[:60])
+    assert post("/hx/%d/precheck" % afid, admin, {}).get("code") == 0, "A 验收预审失败"
     assert scan(t2, afid, "验收登记表").get("code") == 0, "A 验收回扫失败"
     r = post("/hx/%d/review" % afid, admin, {})   # 缺 verifiedAmount → 必拦
     check("验收核定金额必填", r.get("code") != 0 and "必填" in (r.get("msg") or ""), str(r.get("msg")))
@@ -261,7 +290,8 @@ def main():
           and "resubmit" in [x["action"] for x in d["records"]]
           and len(eff_atts(d, fid_b, "hx_docx")) == 0, "status=%s" % d["flow"]["status"])
 
-    # 8. 回扫→常规退回(status=2)→重交:旧扫描件一并作废(spec §3.2)
+    # 8. 预审→回扫→常规退回(status=2)→重交:旧扫描件一并作废(spec §3.2)
+    assert post("/hx/%d/precheck" % fid_b, admin, {}).get("code") == 0, "B 预审失败"
     assert scan(t, fid_b, "登记表").get("code") == 0, "B 回扫失败"
     d = detail(fid_b, t)
     assert len(eff_atts(d, fid_b, "hx_scan")) == 1, "前置:生效扫描件应为 1"
@@ -275,7 +305,8 @@ def main():
           and len(eff_atts(d, fid_b, "hx_scan")) == 0,
           "scan=%d" % len(eff_atts(d, fid_b, "hx_scan")))
 
-    # 9. 重新回扫→通过:编号与 A 唯一且格式合法
+    # 9. 重新预审→回扫→通过:编号与 A 唯一且格式合法
+    assert post("/hx/%d/precheck" % fid_b, admin, {}).get("code") == 0, "B 二次预审失败"
     assert scan(t, fid_b, "登记表").get("code") == 0, "B 二次回扫失败"
     r = post("/hx/%d/review" % fid_b, admin, {})
     d = detail(fid_b, admin)
@@ -288,6 +319,7 @@ def main():
     reg_c = dict(reg_a, name="审批测试-并发通过演练项目")
     fid_c = post("/hx/register/draft", t, reg_c)["data"]
     assert post("/hx/register/submit", t, {"flowId": fid_c}).get("code") == 0, "C 登记提交失败"
+    assert post("/hx/%d/precheck" % fid_c, admin, {}).get("code") == 0, "C 预审失败"
     assert scan(t, fid_c, "登记表").get("code") == 0, "C 回扫失败"
 
     # 9b. 两线程同时 approve 同一登记:恰好一个成功(编号只分配一次),另一个可观测失败

@@ -193,6 +193,13 @@ public class HxController {
         return Result.ok(null);
     }
 
+    /** 取消在途变更单(五轮反馈):status∈{0,1,4,5},作废流程单+扫描件,通知科技处;审核中(2)先撤回 */
+    @PostMapping("/{flowId}/cancel")
+    public Result<Void> cancelChange(@PathVariable Long flowId, HttpServletRequest request) {
+        hxService.cancelChange(uid(request), username(request), flowId);
+        return Result.ok(null);
+    }
+
     @GetMapping("/my")
     public Result<List<Map<String, Object>>> my(HttpServletRequest request) {
         return Result.ok(hxService.myProjects(uid(request)));

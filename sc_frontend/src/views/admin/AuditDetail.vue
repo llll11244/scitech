@@ -10,17 +10,20 @@
             </el-tag>
             <span class="name">{{ d.project?.name }}</span>
             <el-tag :type="STATUS[d.flow.status]?.type" size="small">{{ STATUS[d.flow.status]?.label }}</el-tag>
-            <el-tag v-if="d.flow.status === 1" size="small" type="warning" effect="plain">可预检</el-tag>
+            <el-tag v-if="d.flow.status === 1" size="small" type="warning" effect="plain">待预审</el-tag>
           </div>
           <div>
-            <el-button v-if="d.flow.status === 1 || d.flow.status === 2" type="warning" plain
+            <el-button v-if="[1, 2, 5].includes(d.flow.status)" type="warning" plain
               @click="editMode = !editMode">
               {{ editMode ? '退出修正' : '修正填报' }}
+            </el-button>
+            <el-button v-if="d.flow.status === 1" type="primary" @click="doPrecheck">
+              预审通过
             </el-button>
             <el-button v-if="d.flow.status === 2" type="primary" @click="approveVisible = true">
               {{ d.flow.flowType === 'acceptance' ? '通过(录核定额)' : '通过' }}
             </el-button>
-            <el-button v-if="d.flow.status === 1 || d.flow.status === 2" type="danger" plain
+            <el-button v-if="[1, 2, 5].includes(d.flow.status)" type="danger" plain
               @click="rejectVisible = true">
               退回
             </el-button>
@@ -186,7 +189,7 @@
         </template>
       </el-dialog>
 
-      <!-- 退回弹窗:意见必填;预检勾选仅 status=1 -->
+      <!-- 退回弹窗:意见必填;预审退回勾选仅 status=1 -->
       <el-dialog v-model="rejectVisible" title="退回" width="520px">
         <el-form label-width="90px">
           <el-form-item label="退回意见" required>
@@ -194,7 +197,7 @@
               placeholder="退回原因将通知教师,修改后重交(原盖章件作废)" />
           </el-form-item>
           <el-form-item v-if="d.flow.status === 1">
-            <el-checkbox v-model="isPrecheck">盖章前预检退回(单据尚未盖章,提示教师勿打印盖章)</el-checkbox>
+            <el-checkbox v-model="isPrecheck">预审退回(单据尚未盖章,提示教师勿打印盖章)</el-checkbox>
           </el-form-item>
         </el-form>
         <template #footer>
@@ -214,8 +217,8 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { adminSave, downloadAttachment, downloadDeliver, flowDetail, rejectFlow, reviewFlow } from '../../api/hx'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { adminSave, downloadAttachment, downloadDeliver, flowDetail, precheckPass, rejectFlow, reviewFlow } from '../../api/hx'
 import { buildSheetModel, collectSheetDto } from '../../composables/sheetModel'
 import AcceptanceSheet from '../../components/hxsheet/AcceptanceSheet.vue'
 import ChangeSheet from '../../components/hxsheet/ChangeSheet.vue'
@@ -237,15 +240,16 @@ const meta = reactive({ orig: {} })
 
 const ACTION_LABEL = {
   submit: '提交', withdraw: '撤回', upload_scan: '上传扫描件', resubmit: '重新提交',
-  approve: '审批通过', verify: '验收通过', reject: '退回', precheck_reject: '盖章前预检退回',
-  admin_edit: '科技处修正'
+  precheck: '预审通过', approve: '审批通过', verify: '验收通过', reject: '退回',
+  precheck_reject: '预审退回', admin_edit: '科技处修正'
 }
 const STATUS = {
   0: { label: '草稿', type: 'info' },
-  1: { label: '已提交待回扫', type: 'warning' },
-  2: { label: '已回扫待审核', type: 'primary' },
+  1: { label: '预审中', type: 'warning' },
+  2: { label: '已回扫·审核中', type: 'primary' },
   3: { label: '已通过', type: 'success' },
-  4: { label: '已退回', type: 'danger' }
+  4: { label: '已退回', type: 'danger' },
+  5: { label: '预审通过·待盖章回扫', type: 'primary' }
 }
 const TYPE_TAG = {
   register: { label: '登记表', type: 'primary' },
@@ -323,7 +327,7 @@ async function load() {
     Object.keys(meta).forEach((k) => delete meta[k])
     Object.assign(meta, built.meta)
     curDoc.value = docs.value[0]?.type || ''
-    if (![1, 2].includes(d.value.flow.status)) {
+    if (![1, 2, 5].includes(d.value.flow.status)) {
       editMode.value = false
     }
     sheetReady.value = true
@@ -390,6 +394,25 @@ async function downAtt(a) {
 }
 
 /* ---------- 审批动作 ---------- */
+/** 预审通过(1→5):通知教师打印盖章回扫;教师上传扫描件后方可「通过」 */
+async function doPrecheck() {
+  try {
+    await ElMessageBox.confirm(
+      '预审通过后将通知教师打印单据、线下盖章并上传扫描件,上传后进入审核,确定通过预审?',
+      '预审通过', { type: 'info' })
+  } catch { return }
+  acting.value = true
+  try {
+    await precheckPass(flowId.value)
+    ElMessage.success('预审已通过,已通知教师盖章回扫')
+    await load()
+  } catch (e) {
+    /* 拦截器已提示 */
+  } finally {
+    acting.value = false
+  }
+}
+
 const approveVisible = ref(false)
 const rejectVisible = ref(false)
 const verifiedAmount = ref(null)
@@ -425,7 +448,7 @@ async function doReject() {
   }
   acting.value = true
   try {
-    await rejectFlow(flowId.value, isPrecheck.value ? `盖章前预检:${opinion}` : opinion, isPrecheck.value)
+    await rejectFlow(flowId.value, isPrecheck.value ? `预审退回:${opinion}` : opinion, isPrecheck.value)
     ElMessage.success('已退回,已通知教师')
     rejectVisible.value = false
     await load()

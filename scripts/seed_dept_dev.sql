@@ -14,3 +14,9 @@ INSERT INTO scitech_db.sys_dept (id, parent_id, name, sort_order, create_by) VAL
 (16, 0, '外语与文化旅游学院', 8,  'admin'),
 (17, 0, '汽车与交通学院', 9,  'admin'),
 (18, 0, '食品与药品学院', 10, 'admin');
+
+-- 四轮反馈(2026-10-23):职能部门并入院部列表(校内成员「所在单位」下拉=院部列表,职能部门同样走此表)
+DELETE FROM scitech_db.sys_dept WHERE id BETWEEN 19 AND 20;
+INSERT INTO scitech_db.sys_dept (id, parent_id, name, sort_order, create_by) VALUES
+(19, 0, '科技处', 11, 'admin'),
+(20, 0, '计财处', 12, 'admin');
