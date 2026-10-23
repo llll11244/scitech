@@ -8,9 +8,20 @@
         </div>
       </template>
 
-      <el-empty v-if="!loading && !rows.length" description="暂无项目,点击右上角「新建登记」发起第一项横向项目" />
+      <!-- 查询栏:关键字(名称/编号/负责人)+状态,前端实时过滤 -->
+      <div class="qbar">
+        <el-input v-model="qKeyword" placeholder="名称 / 编号 / 负责人" clearable class="w-220"
+          prefix-icon="Search" />
+        <el-select v-model="qState" placeholder="全部状态" clearable class="w-150">
+          <el-option v-for="s in STATE_OPTIONS" :key="s" :label="s" :value="s" />
+        </el-select>
+        <el-button @click="qKeyword = ''; qState = ''">重置</el-button>
+      </div>
 
-      <el-table v-else :data="rows" v-loading="loading">
+      <el-empty v-if="!loading && !filtered.length"
+        :description="qKeyword || qState ? '没有符合条件的项目' : '暂无项目,点击右上角「新建登记」发起第一项横向项目'" />
+
+      <el-table v-else :data="filtered" v-loading="loading">
         <el-table-column label="项目名称" min-width="220" show-overflow-tooltip>
           <template #default="{ row }">
             <el-link type="primary" @click="openDetail(row)">{{ row.name }}</el-link>
@@ -63,7 +74,7 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { myProjects, deleteDraft } from '../../api/hx'
@@ -71,6 +82,26 @@ import { myProjects, deleteDraft } from '../../api/hx'
 const router = useRouter()
 const loading = ref(false)
 const rows = ref([])
+
+/* 查询栏:关键字(名称/编号/负责人)+状态,前端实时过滤(量小即时反馈) */
+const qKeyword = ref('')
+const qState = ref('')
+const STATE_OPTIONS = ['被退回', '登记草稿', '登记中', '变更中', '验收中', '在研', '已结题']
+const filtered = computed(() => {
+  const kw = qKeyword.value.trim().toLowerCase()
+  return rows.value.filter((row) => {
+    if (kw && ![row.name, row.approvalNo, row.leaderName]
+      .some((v) => (v || '').toLowerCase().includes(kw))) {
+      return false
+    }
+    if (qState.value) {
+      const label = stateOf(row).label
+      const hit = qState.value === '被退回' ? label.includes('被退回') : label === qState.value
+      if (!hit) return false
+    }
+    return true
+  })
+})
 
 const registerFlow = (row) => row.flows?.find((f) => f.flowType === 'register')
 /** 在途变更单(0/1/2/4;3 通过后可再发新单) */
@@ -147,5 +178,18 @@ export default { name: 'MyProjects' }
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+/* 查询栏:一行排布,间距 8px */
+.qbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.w-220 {
+  width: 220px;
+}
+.w-150 {
+  width: 150px;
 }
 </style>

@@ -19,7 +19,14 @@
         </div>
       </template>
 
-      <el-table :data="rows" v-loading="loading" @row-click="open">
+      <!-- 关键字:名称/负责人/院部,前端实时过滤(类型/状态走后端参数) -->
+      <div class="qbar">
+        <el-input v-model="qKeyword" placeholder="项目名称 / 负责人 / 院部" clearable class="w-240"
+          prefix-icon="Search" />
+        <el-button @click="qKeyword = ''">重置</el-button>
+      </div>
+
+      <el-table :data="filtered" v-loading="loading" @row-click="open">
         <el-table-column label="类型" width="96">
           <template #default="{ row }">
             <el-tag :type="TYPE_TAG[row.flowType]?.type || 'info'" effect="plain">
@@ -62,7 +69,8 @@
           </template>
         </el-table-column>
       </el-table>
-      <el-empty v-if="!loading && !rows.length" description="暂无流程单" :image-size="70" />
+      <el-empty v-if="!loading && !filtered.length"
+        :description="qKeyword ? '没有符合条件的流程单' : '暂无流程单'" :image-size="70" />
     </el-card>
   </div>
 </template>
@@ -72,7 +80,7 @@
   点行进审批详情。量小不分页(与后端口径一致)。
 -->
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { auditList } from '../../api/hx'
 
@@ -81,6 +89,15 @@ const loading = ref(false)
 const rows = ref([])
 const flowType = ref(null)
 const status = ref(null)
+
+/* 关键字:名称/负责人/院部,前端实时过滤 */
+const qKeyword = ref('')
+const filtered = computed(() => {
+  const kw = qKeyword.value.trim().toLowerCase()
+  if (!kw) return rows.value
+  return rows.value.filter((row) => [row.name, row.leaderName, row.deptName]
+    .some((v) => (v || '').toLowerCase().includes(kw)))
+})
 
 const STATUS = {
   0: { label: '草稿', type: 'info' },
@@ -127,6 +144,15 @@ export default { name: 'AuditList' }
   align-items: center;
 }
 
+.qbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.w-240 {
+  width: 240px;
+}
 .filters {
   display: flex;
   gap: 10px;

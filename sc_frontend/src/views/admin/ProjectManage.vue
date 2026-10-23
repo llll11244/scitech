@@ -8,7 +8,17 @@
         </div>
       </template>
 
-      <el-table :data="rows" v-loading="loading" row-key="projectId" @expand-change="onExpand">
+      <!-- 查询栏:关键字(名称/编号/负责人/委托单位)+执行状态,前端实时过滤 -->
+      <div class="qbar">
+        <el-input v-model="qKeyword" placeholder="项目名称 / 编号 / 负责人 / 委托单位" clearable
+          class="w-260" prefix-icon="Search" />
+        <el-select v-model="qExec" placeholder="全部执行状态" clearable class="w-150">
+          <el-option v-for="s in EXEC_OPTIONS" :key="s" :label="s" :value="s" />
+        </el-select>
+        <el-button @click="qKeyword = ''; qExec = ''">重置</el-button>
+      </div>
+
+      <el-table :data="filtered" v-loading="loading" row-key="projectId" @expand-change="onExpand">
         <!-- 行展开:到账明细管理 -->
         <el-table-column type="expand">
           <template #default="{ row }">
@@ -71,7 +81,8 @@
           <template #default="{ row }">{{ String(row.hxRegisterDate || '').slice(0, 10) || '—' }}</template>
         </el-table-column>
       </el-table>
-      <el-empty v-if="!loading && !rows.length" description="暂无横向项目" :image-size="70" />
+      <el-empty v-if="!loading && !filtered.length"
+        :description="qKeyword || qExec ? '没有符合条件的项目' : '暂无横向项目'" :image-size="70" />
     </el-card>
 
     <!-- 录入到账 -->
@@ -108,7 +119,7 @@
   到账累计/执行状态/登记日期)+在途流程单提示;行展开=到账明细管理(admin 增删,Task25 接口)。
 -->
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { addFunding, adminFunding, deleteFunding, projectList } from '../../api/hx'
 
@@ -117,6 +128,21 @@ const rows = ref([])
 const fundRows = reactive({})      // projectId → records
 const fundTotal = reactive({})     // projectId → total
 const fundingLoading = reactive({})
+
+/* 查询栏:关键字(名称/编号/负责人/委托单位)+执行状态,前端实时过滤 */
+const qKeyword = ref('')
+const qExec = ref('')
+const EXEC_OPTIONS = ['登记中', '变更中', '验收中', '在研', '已结题']
+const filtered = computed(() => {
+  const kw = qKeyword.value.trim().toLowerCase()
+  return rows.value.filter((row) => {
+    if (kw && ![row.name, row.approvalNo, row.leaderName, row.clientName]
+      .some((v) => (v || '').toLowerCase().includes(kw))) {
+      return false
+    }
+    return !qExec.value || row.execStatus === qExec.value
+  })
+})
 
 const EXEC_TAG = { 登记中: 'warning', 在研: 'success', 变更中: 'warning', 已结题: 'info' }
 const FLOW_LABEL = { register: '登记', change: '变更', acceptance: '验收' }
@@ -231,6 +257,22 @@ export default { name: 'ProjectManage' }
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+/* 查询栏:一行排布,间距 8px */
+.qbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.w-260 {
+  width: 260px;
+}
+
+.w-150 {
+  width: 150px;
 }
 
 .expand-box {
