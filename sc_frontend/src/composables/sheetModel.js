@@ -24,12 +24,14 @@ export async function buildSheetModel(d, flowType) {
   o.endDate = cn(d.hx.endDate)
 
   if (flowType === 'register') {
-    const [pt, cn2, ds] = await Promise.all([
-      listDict('hx_project_type'), listDict('hx_client_nature'), listDepts()
+    const [pt, cn2, bs, ds] = await Promise.all([
+      listDict('hx_project_type'), listDict('hx_client_nature'),
+      listDict('hx_budget_subject'), listDepts()
     ])
     meta.depts = ds
     meta.dictProjectType = pt.map((x) => x.label)
     meta.dictClientNature = cn2.map((x) => x.label)
+    meta.dictBudgetSubject = bs.map((x) => x.label)
     meta.hxRegisterDate = d.hx.hxRegisterDate || ''
     meta.leaderPhone = o.leaderPhone
     meta.mgmtRate = await getConfig('hx_mgmt_fee_rate')

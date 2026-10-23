@@ -179,7 +179,7 @@
               </details>
             </td>
           </tr>
-          <tr v-for="b in model.budgets" :key="b.subject">
+          <tr v-for="b in budgetRows" :key="b.subject">
             <td>{{ b.subject }}</td>
             <td colspan="5" class="bcell">
               <template v-if="mode === 'edit'">
@@ -270,7 +270,7 @@ const props = defineProps({
     type: Object,
     default: () => ({
       approvalNo: '', leaderPhone: '', hxRegisterDate: '', mgmtRate: null,
-      dictProjectType: [], dictClientNature: [], dictTitle: [], depts: []
+      dictProjectType: [], dictClientNature: [], dictTitle: [], dictBudgetSubject: [], depts: []
     })
   }
 })
@@ -346,9 +346,22 @@ function toggleBudget(b) {
   if (b.unrestricted) b.amount = null
   touch()
 }
-const budgetTotal = computed(() => (props.model.budgets || [])
+const budgetTotal = computed(() => budgetRows.value
   .filter((b) => !b.unrestricted)
   .reduce((s, b) => s + (Number(b.amount) || 0), 0))
+
+/**
+ * 科目行恒按字典六科目渲染(版式稳定,rowspan=8 前提):
+ * 编辑态=model.budgets(页面已按字典骨架初始化);打印态(审批页/打印页数据来自库中实存行,
+ * 可能只存了部分科目)按字典骨架合并实存值,缺的科目显示空白——与演示稿口径一致。
+ */
+const budgetRows = computed(() => {
+  if (props.mode === 'edit') return props.model.budgets || []
+  const dict = props.meta.dictBudgetSubject || []
+  if (!dict.length) return props.model.budgets || []
+  return dict.map((s) => (props.model.budgets || []).find((b) => b.subject === s)
+    || { subject: s, amount: null, unrestricted: 0 })
+})
 
 function touch() {
   emit('change')
