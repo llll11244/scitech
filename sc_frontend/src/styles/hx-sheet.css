@@ -68,7 +68,8 @@ html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 
 /* ===== 工具条(屏显悬浮钉窗口左上,按钮形式一行排列;打印隐藏) =====
    注意:工具条挂在页面壳(RegisterPage/PrintPage 等)顶层,不在 .hx-sheet 组件内——选择器不带前缀 */
-.btoolbar { position: fixed; top: 10px; left: 12px; z-index: 100;
+/* 左缘对齐表单容器(.page max-width:1000px 居中):宽屏贴表单左上、窄屏退到视口左缘 */
+.btoolbar { position: fixed; top: 10px; left: max(12px, calc(50% - 500px)); z-index: 100;
   display: flex; align-items: center; gap: 8px;
   padding: 6px 12px; font-size: 13px; background: rgba(255, 255, 255, .92);
   border: 1px solid #C9E9F9; border-radius: 16px; box-shadow: 0 1px 6px rgba(23, 145, 204, .18); }
