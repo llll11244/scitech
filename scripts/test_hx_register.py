@@ -16,8 +16,12 @@ def check(name, ok, detail=""):
     print(("PASS" if ok else "FAIL"), "-", name, detail)
 
 def login(u, p):
-    r = requests.post(BASE + "/auth/login", json={"username": u, "password": p}, timeout=10).json()
-    return {"Authorization": "Bearer " + r["data"]["token"]}
+    # 2026-10-24 测试教师密码直改库为 123;兼容旧口径 teacher123/teacher2123 回退
+    for pwd in (p, "123", u + "123"):
+        r = requests.post(BASE + "/auth/login", json={"username": u, "password": pwd}, timeout=10).json()
+        if r.get("code") == 0:
+            return {"Authorization": "Bearer " + r["data"]["token"]}
+    raise SystemExit("登录失败:" + u)
 
 def detail(fid, headers):
     return requests.get(BASE + "/hx/%d" % fid, headers=headers, timeout=30).json()["data"]

@@ -30,8 +30,12 @@ def check(name, ok, detail=""):
 
 
 def login(u, p):
-    r = requests.post(BASE + "/auth/login", json={"username": u, "password": p}, timeout=10).json()
-    return {"Authorization": "Bearer " + r["data"]["token"]}
+    # 2026-10-24 测试教师密码直改库为 123;兼容旧口径 teacher123/teacher2123 回退
+    for pwd in (p, "123", u + "123"):
+        r = requests.post(BASE + "/auth/login", json={"username": u, "password": pwd}, timeout=10).json()
+        if r.get("code") == 0:
+            return {"Authorization": "Bearer " + r["data"]["token"]}
+    raise SystemExit("登录失败:" + u)
 
 
 def req(method, path, headers, timeout=120, **kw):
@@ -138,6 +142,8 @@ def main():
     assert post("/hx/acceptance/submit", t, {"flowId": afid}).get("code") == 0, "乙 验收提交失败"
     assert post("/hx/%d/precheck" % afid, admin, {}).get("code") == 0, "乙 验收预审失败"
     assert scan(t, afid, "验收登记表").get("code") == 0, "乙 验收回扫失败"
+    # 2026-11-05 审核边界B:验收审批须两件盖章件齐全,测试夹具补传验收报告
+    assert scan(t, afid, "验收报告").get("code") == 0, "乙 验收回扫(报告)失败"
     assert post("/hx/%d/review" % afid, admin, {"verifiedAmount": 100000.00}).get("code") == 0, "乙 验收审批失败"
     assert detail(afid, t)["project"]["status"] == "结题", "乙 未结题"
     fid_g = post("/hx/register/draft", t, reg_payload("到账测试-草稿附件项目丙"))["data"]

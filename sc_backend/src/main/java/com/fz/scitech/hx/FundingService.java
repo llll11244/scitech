@@ -26,6 +26,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -92,13 +93,19 @@ public class FundingService {
         if (p == null || p.getKind() == null || p.getKind() != 2) {
             throw new BizException("横向项目不存在");
         }
-        if (body.amount() == null || body.amount().signum() <= 0) {
+        if (body.amount() == null) {
             throw new BizException("到账金额必须大于 0");
         }
+        // 两位小数收口(2026-11-05 小项①:先舍入再判正,防 0.001 落库变 0.00;通知文案与落库同值)
+        BigDecimal amount = body.amount().setScale(2, RoundingMode.HALF_UP);
+        if (amount.signum() <= 0) {
+            throw new BizException("到账金额必须大于 0");
+        }
+        HxService.amountCheck(amount, "到账金额");
         LocalDate receivedDate = parseDate(body.receivedDate());
         RpFundingRecord r = new RpFundingRecord();
         r.setProjectId(p.getId());
-        r.setAmount(body.amount());
+        r.setAmount(amount);
         r.setReceivedDate(receivedDate);
         r.setPayer(trimToNull(body.payer()));
         r.setBankFlowNo(trimToNull(body.bankFlowNo()));
@@ -106,7 +113,7 @@ public class FundingService {
         r.setCreateBy(adminName);
         fundingMapper.insert(r);
         notifyTeacher(p.getApplyUserId(), "横向项目到账通知",
-                "您的项目《" + p.getName() + "》到账 " + body.amount() + " 元(到账日期:" + receivedDate
+                "您的项目《" + p.getName() + "》到账 " + amount + " 元(到账日期:" + receivedDate
                         + "),当前累计到账:" + hxService.receivedTotal(p.getId()) + " 元。",
                 p.getId(), adminName);
         return r.getId();

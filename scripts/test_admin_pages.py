@@ -23,8 +23,12 @@ def check(name, ok, detail=""):
 
 
 def login(u, p):
-    r = requests.post(BASE + "/auth/login", json={"username": u, "password": p}, timeout=10).json()
-    return {"Authorization": "Bearer " + r["data"]["token"]}
+    # 2026-10-24 测试教师密码直改库为 123;兼容旧口径 teacher123/teacher2123 回退
+    for pwd in (p, "123", u + "123"):
+        r = requests.post(BASE + "/auth/login", json={"username": u, "password": pwd}, timeout=10).json()
+        if r.get("code") == 0:
+            return {"Authorization": "Bearer " + r["data"]["token"]}
+    raise SystemExit("登录失败:" + u)
 
 
 def req(method, path, headers, timeout=120, **kw):
@@ -108,6 +112,8 @@ def main():
     assert post("/hx/acceptance/submit", t, {"flowId": fid_acc}).get("code") == 0, "验收提交失败"
     assert post("/hx/%d/precheck" % fid_acc, admin, {}).get("code") == 0, "验收预审失败"
     assert scan(t, fid_acc, "验收登记表").get("code") == 0, "验收回扫失败"
+    # 2026-11-05 审核边界B:验收审批须两件盖章件齐全,测试夹具补传验收报告
+    assert scan(t, fid_acc, "验收报告").get("code") == 0, "验收回扫(报告)失败"
     assert post("/hx/%d/review" % fid_acc, admin, {"verifiedAmount": 80000.00}).get("code") == 0, "验收审批失败"
     assert post("/hx/%d/review" % fid_acc, admin, {}).get("code") != 0, "重复通过未拒"
 
@@ -116,13 +122,7 @@ def main():
     check("终版下载已退役(结题单无归档件)", code != 0, "code=%s" % code)
     code, body = raw("GET", "/hx/%d/deliver-final/docx" % fid_reg, t)
     check("登记单无终版拒(未验收确认)", code != 0, "code=%s" % code)
-    # 未通过的单(造一张在途变更)也无终版
-    chg = {"projectId": pid, "changeType": "项目经费", "changeContent": "经费调增",
-           "changeReason": "委托方追加", "newAmount": "210000.00"}
-    fid_chg = post("/hx/change/draft", t, chg)["data"]
-    assert post("/hx/change/submit", t, {"flowId": fid_chg}).get("code") == 0, "变更提交失败"
-    code, body = raw("GET", "/hx/%d/deliver-final/docx" % fid_chg, t)
-    check("在途变更单无终版拒", code != 0, "code=%s" % code)
+    # 在途变更无终版:2026-11-05 边界F(结题项目禁再变更)后,在途单改在下方未结题的 pid2 上造(见④)
 
     # ================ ④ 变更单 newLeaderName 回显(独立项目,避开上面的在途变更单) ================
     _, pid2 = register_confirmed(t, admin, "Task26变更回显项目")
@@ -136,6 +136,10 @@ def main():
     d = get("/hx/%d" % r2["data"], t).get("data") or {}
     check("变更单 newLeaderName 回显", d.get("newLeaderName") == (leader2 or {}).get("name"),
           "newLeaderName=%s" % d.get("newLeaderName"))
+    # 在途变更单无终版(原在①结题项目上造,边界F 后移此:未结题项目提交在途变更)
+    assert post("/hx/change/submit", t, {"flowId": r2["data"]}).get("code") == 0, "变更提交失败"
+    code, body = raw("GET", "/hx/%d/deliver-final/docx" % r2["data"], t)
+    check("在途变更单无终版拒", code != 0, "code=%s" % code)
 
     # ================ ② 字典管理 ================
     check("manage 教师拒", get("/dicts/manage?type=hx_member_type", t).get("code") != 0, "")

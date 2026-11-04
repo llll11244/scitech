@@ -156,6 +156,11 @@ public class HxService {
      * project 三字段 + 扩展/成员/预算整体覆盖;guardEditable 条件占位防并发竞态(决策#34-②)。
      */
     void applyRegisterEdit(RpHxFlow flow, RegisterSaveDTO dto, String operator, String rejectMsg) {
+        if (!"register".equals(flow.getFlowType())) {
+            // 2026-11-05 审核bugA:flowId 与接口须匹配——借变更/验收单 id 可绕过登记单自身的
+            // 「通过即锁定」改登记数据(editableBeforeApprove 按错单状态判定),一律拒绝
+            throw new BizException("非登记流程单");
+        }
         if (!editableBeforeApprove(flow.getStatus())) {
             throw new BizException(rejectMsg);
         }
@@ -229,6 +234,12 @@ public class HxService {
         if (h.getContractAmount().signum() <= 0) {
             throw new BizException("合同经费必须大于 0");
         }
+        amountCheck(h.getContractAmount(), "合同经费");
+        LocalDate sd = parseDate(h.getStartDate());
+        LocalDate ed = parseDate(h.getEndDate());
+        if (sd != null && ed != null && sd.isAfter(ed)) {
+            throw new BizException("开始时间不得晚于结束时间");
+        }
         lenCheck(dto.getName(), 100, "项目名称");
         lenCheck(dto.getLeaderName(), 64, "负责人姓名");
         lenCheck(h.getClientName(), 255, "委托单位名称");
@@ -263,6 +274,7 @@ public class HxService {
         if (flow.getUsedAmount().signum() < 0) {
             throw new BizException("使用经费不能为负数");
         }
+        amountCheck(flow.getUsedAmount(), "使用经费");
     }
 
     /** 规则R3-R6:验收金额核算(比例合计=100%、金额合计=到账、使用≤到账、无到账拒) */
@@ -280,6 +292,12 @@ public class HxService {
         for (RpMember m : memberMapper.selectList(new LambdaQueryWrapper<RpMember>()
                 .eq(RpMember::getProjectId, projectId)
                 .ne(RpMember::getMemberType, "学生"))) {
+            if (m.getRatio() != null && m.getRatio().signum() < 0) {
+                throw new BizException("成员比例不得为负数(负比例+超额可凑出 100%,无业务意义)");
+            }
+            if (m.getAmount() != null && m.getAmount().signum() < 0) {
+                throw new BizException("成员经费分配金额不得为负数");
+            }
             if (m.getRatio() != null) {
                 ratioSum = ratioSum.add(m.getRatio());
             }
@@ -302,6 +320,16 @@ public class HxService {
         }
     }
 
+    /** 金额量级上限=DECIMAL(14,2) 整数位 12 位(2026-11-05 审核边界D):超限友好拒,防库报错落兜底 */
+    static final BigDecimal AMOUNT_MAX = new BigDecimal("999999999999.99");
+
+    /** 金额量级校验(包级:HxAuditService/FundingService 同口径复用);null 跳过(必填由各校验自理) */
+    static void amountCheck(BigDecimal v, String label) {
+        if (v != null && v.abs().compareTo(AMOUNT_MAX) > 0) {
+            throw new BizException(label + "超过最大值 999999999999.99 元");
+        }
+    }
+
     /** 金额提示用(去尾零,355000.00→355000) */
     static String plain(BigDecimal v) {
         return v == null ? "" : v.stripTrailingZeros().toPlainString();
@@ -316,6 +344,11 @@ public class HxService {
     @Transactional
     public void submitRegister(Long uid, String username, Long flowId) {
         RpHxFlow flow = ownedFlow(uid, flowId);
+        if (!"register".equals(flow.getFlowType())) {
+            // 2026-11-05 审核bugA:借变更/验收草稿单 id 走登记提交会把该单 0→1 并强置
+            // project.auditStatus=1(已立项被打回「登记中」),且跳过该单类型自身的提交校验
+            throw new BizException("非登记流程单");
+        }
         if (flow.getStatus() != HxFlowStatus.DRAFT) {
             throw new BizException("仅草稿可提交");
         }
@@ -341,8 +374,10 @@ public class HxService {
     @Transactional
     public Long saveChangeDraft(Long uid, String username, ChangeSaveDTO dto) {
         RpProject project = ownedProject(uid, dto.getProjectId());
+        guardNotConcluded(project);
         LocalDate newEndDate = parseDate(dto.getNewEndDate());   // 格式先验,再联动必填
         validateChange(dto.getChangeType(), dto.getNewAmount(), newEndDate, dto.getNewLeaderId());
+        validateChangeEnd(project.getId(), newEndDate);
         validateChangeTexts(dto);
         guardChangeUnique(project.getId(), dto.getFlowId());
         RpHxFlow flow;
@@ -417,6 +452,7 @@ public class HxService {
         if (newAmount != null && newAmount.signum() <= 0) {
             throw new BizException("变更后经费必须大于 0");
         }
+        amountCheck(newAmount, "变更后经费");
         if (types.contains("执行周期") && newEndDate == null) {
             throw new BizException("变更类型含「执行周期」,须填写变更后结束时间");
         }
@@ -454,8 +490,9 @@ public class HxService {
         if (flow.getStatus() != HxFlowStatus.DRAFT) {
             throw new BizException("仅草稿可提交");
         }
-        requireConfirmed(flow.getProjectId(), "变更单");
+        guardNotConcluded(requireConfirmed(flow.getProjectId(), "变更单"));
         validateChange(flow.getChangeType(), flow.getNewAmount(), flow.getNewEndDate(), flow.getNewLeaderId());
+        validateChangeEnd(flow.getProjectId(), flow.getNewEndDate());
         String beforeJson = snapshotBefore(flow.getProjectId());
         transit(flowId, HxFlowStatus.DRAFT, HxFlowStatus.SUBMITTED);
         flowMapper.update(null, new LambdaUpdateWrapper<RpHxFlow>()
@@ -878,7 +915,9 @@ public class HxService {
             throw new BizException((finalVersion ? "终版文件" : "待签文件") + "已缺失:" + att.getFilePath());
         }
         response.setContentType(bizType.endsWith("pdf") ? MediaType.APPLICATION_PDF_VALUE : DOCX_MIME);
-        response.setHeader("Content-Disposition", "inline; filename=" + att.getFileName());
+        // RFC5987 编码(2026-11-05 小项②:中文原名直拼 header 会按容器默认字符集截损,与 writeAttachment 同口径)
+        response.setHeader("Content-Disposition", "inline; filename*=UTF-8''"
+                + URLEncoder.encode(att.getFileName(), StandardCharsets.UTF_8).replace("+", "%20"));
         response.setContentLengthLong(f.length());
         try (InputStream in = new FileInputStream(f)) {
             in.transferTo(response.getOutputStream());
@@ -983,11 +1022,30 @@ public class HxService {
         return flow;
     }
 
-    /** 变更/验收提交的确认态强校验(spec §6.1:projectId 必须已登记确认,audit_status=2) */
-    private void requireConfirmed(Long projectId, String label) {
+    /** 变更/验收提交的确认态强校验(spec §6.1:projectId 必须已登记确认,audit_status=2);返回项目行供调用方续判 */
+    private RpProject requireConfirmed(Long projectId, String label) {
         RpProject p = projectMapper.selectById(projectId);
         if (p == null || p.getAuditStatus() == null || p.getAuditStatus() != 2) {
             throw new BizException("项目未确认," + label + "须在登记确认(科技处审核通过)后提交");
+        }
+        return p;
+    }
+
+    /** 结题项目禁再发起变更(2026-11-05 用户口径:教师端拒;admin 代改/审批链路不受限) */
+    static void guardNotConcluded(RpProject p) {
+        if (p != null && "结题".equals(p.getStatus())) {
+            throw new BizException("项目已结题,不可发起变更;如确需调整请联系科技处");
+        }
+    }
+
+    /** 变更执行周期边界(2026-11-05 审核边界E2):变更后结束时间不得早于项目开始时间(教师保存/提交与 admin 代改共用) */
+    void validateChangeEnd(Long projectId, LocalDate newEndDate) {
+        if (newEndDate == null) {
+            return;
+        }
+        RpHxProject hx = hxMapper.selectById(projectId);
+        if (hx != null && hx.getStartDate() != null && newEndDate.isBefore(hx.getStartDate())) {
+            throw new BizException("变更后结束时间不得早于项目开始时间(" + hx.getStartDate() + ")");
         }
     }
 
@@ -1118,6 +1176,7 @@ public class HxService {
             lenCheck(m.getDuty(), 500, "成员工作任务");
             lenCheck(m.getStudentNo(), 32, "学号");
             lenCheck(m.getMentor(), 64, "指导老师");
+            amountCheck(m.getAmount(), "成员经费分配金额");
             RpMember e = toMemberEntity(m, projectId, createBy);
             if (e.getSortNo() == null) {
                 e.setSortNo(sort);

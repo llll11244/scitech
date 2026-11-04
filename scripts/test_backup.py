@@ -28,10 +28,13 @@ def check(name, ok, detail=""):
 
 
 def login(username, password):
-    r = requests.post(BASE + "/auth/login", json={"username": username, "password": password},
-                      timeout=10).json()
-    assert r.get("code") == 0, "登录失败:" + username
-    return {"Authorization": "Bearer " + r["data"]["token"]}
+    # 2026-10-24 测试教师密码直改库为 123;兼容旧口径 teacher123 回退
+    for pwd in (password, "123", username + "123"):
+        r = requests.post(BASE + "/auth/login", json={"username": username, "password": pwd},
+                          timeout=10).json()
+        if r.get("code") == 0:
+            return {"Authorization": "Bearer " + r["data"]["token"]}
+    raise SystemExit("登录失败:" + username)
 
 
 def main():

@@ -13,6 +13,8 @@ import com.fz.scitech.hx.entity.RpProject;
 import com.fz.scitech.hx.mapper.RpHxFlowMapper;
 import com.fz.scitech.hx.mapper.RpHxProjectMapper;
 import com.fz.scitech.hx.mapper.RpProjectMapper;
+import com.fz.scitech.platform.attachment.RpAttachment;
+import com.fz.scitech.platform.attachment.mapper.RpAttachmentMapper;
 import com.fz.scitech.system.entity.SysDept;
 import com.fz.scitech.system.entity.SysNotify;
 import com.fz.scitech.system.entity.SysUser;
@@ -52,6 +54,7 @@ public class HxAuditService {
     private final RpProjectMapper projectMapper;
     private final RpHxProjectMapper hxMapper;
     private final RpHxFlowMapper flowMapper;
+    private final RpAttachmentMapper attachmentMapper;
     private final SysUserMapper userMapper;
     private final SysDeptMapper deptMapper;
     private final SysNotifyMapper notifyMapper;
@@ -60,12 +63,13 @@ public class HxAuditService {
     private final ObjectMapper objectMapper;
 
     public HxAuditService(RpProjectMapper projectMapper, RpHxProjectMapper hxMapper, RpHxFlowMapper flowMapper,
-                          SysUserMapper userMapper, SysDeptMapper deptMapper,
+                          RpAttachmentMapper attachmentMapper, SysUserMapper userMapper, SysDeptMapper deptMapper,
                           SysNotifyMapper notifyMapper, HxService hxService, MgmtFeePolicy mgmtFeePolicy,
                           ObjectMapper objectMapper) {
         this.projectMapper = projectMapper;
         this.hxMapper = hxMapper;
         this.flowMapper = flowMapper;
+        this.attachmentMapper = attachmentMapper;
         this.userMapper = userMapper;
         this.deptMapper = deptMapper;
         this.notifyMapper = notifyMapper;
@@ -133,8 +137,29 @@ public class HxAuditService {
         switch (flow.getFlowType()) {
             case "register" -> approveRegister(adminId, adminName, flow);
             case "change" -> approveChange(adminId, adminName, flow);
-            case "acceptance" -> approveAcceptance(adminId, adminName, flow, verifiedAmount);
+            case "acceptance" -> {
+                requireAcceptanceScans(flow);
+                approveAcceptance(adminId, adminName, flow, verifiedAmount);
+            }
             default -> throw new BizException("未知流程类型:" + flow.getFlowType());
+        }
+    }
+
+    /**
+     * 验收审批前扫描件齐全校验(2026-11-05 审核边界B):验收单须『验收登记表』与『验收报告』
+     * 两类盖章件都回扫后方可通过——此前只传一件也能把单据推到已回扫直接批结题。
+     * 口径:同流程单前缀 hx/{pid}/scan/{fid}/ 下的生效 hx_scan,按 docType 判存在(与 invalidateOld 同定位)。
+     */
+    private void requireAcceptanceScans(RpHxFlow flow) {
+        List<String> have = attachmentMapper.selectList(new LambdaQueryWrapper<RpAttachment>()
+                        .eq(RpAttachment::getProjectId, flow.getProjectId())
+                        .eq(RpAttachment::getBizType, "hx_scan")
+                        .likeRight(RpAttachment::getFilePath,
+                                "hx/" + flow.getProjectId() + "/scan/" + flow.getId() + "/"))
+                .stream().map(RpAttachment::getDocType).collect(Collectors.toList());
+        if (!have.contains("验收登记表") || !have.contains("验收报告")) {
+            throw new BizException("验收扫描件不全:须『验收登记表』与『验收报告』两件均回扫后方可审批"
+                    + "(现有:" + (have.isEmpty() ? "无" : String.join("/", have)) + ")");
         }
     }
 
@@ -212,6 +237,7 @@ public class HxAuditService {
         if (verifiedAmount.signum() <= 0) {
             throw new BizException("核定到账金额必须大于 0");
         }
+        HxService.amountCheck(verifiedAmount, "核定到账金额");
         Long pid = flow.getProjectId();
         RpProject p = requireProject(pid);
         LocalDate today = LocalDate.now();
@@ -277,6 +303,7 @@ public class HxAuditService {
                 ChangeSaveDTO dto = objectMapper.convertValue(body, ChangeSaveDTO.class);
                 hxService.validateChange(dto.getChangeType(), dto.getNewAmount(),
                         HxService.parseDate(dto.getNewEndDate()), dto.getNewLeaderId());
+                hxService.validateChangeEnd(flow.getProjectId(), HxService.parseDate(dto.getNewEndDate()));
                 hxService.validateChangeTexts(dto);
                 hxService.applyChangeEdit(flow, dto, msg);
             }
@@ -304,6 +331,7 @@ public class HxAuditService {
         if (opinion == null || opinion.isBlank()) {
             throw new BizException("退回意见必填");
         }
+        HxService.lenCheck(opinion, 500, "退回意见");   // 列宽 varchar(500),超长友好拒(2026-11-05 边界C)
         RpHxFlow flow = requireFlow(flowId);
         int st = flow.getStatus();
         if (st != HxFlowStatus.SUBMITTED && st != HxFlowStatus.SCANNED
