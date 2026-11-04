@@ -581,6 +581,22 @@ public class HxService {
         }
     }
 
+    /**
+     * 验收提交前置(2026-11-05 用户拍板 ③):非草稿在途变更 {1,2,4,5} 存在即拒——
+     * 变更影响经费/周期/负责人,验收的按期判定与金额核对须基于变更办结后的口径,故变更须先办结再验收;
+     * 草稿(0)不拦(结题后 submitChange 已被 guardNotConcluded 摁死,无生效路径)。
+     */
+    private void guardAcceptanceNoInflightChange(Long projectId) {
+        Long count = flowMapper.selectCount(new LambdaQueryWrapper<RpHxFlow>()
+                .eq(RpHxFlow::getProjectId, projectId)
+                .eq(RpHxFlow::getFlowType, "change")
+                .in(RpHxFlow::getStatus, HxFlowStatus.SUBMITTED, HxFlowStatus.SCANNED,
+                        HxFlowStatus.REJECTED, HxFlowStatus.PRECHECK_PASSED));
+        if (count != null && count > 0) {
+            throw new BizException("存在未办结的变更单,请先办结(通过)或取消该变更后再提交验收");
+        }
+    }
+
     // ---------- 验收提交 ----------
     /** 验收提交:audit_status=2 强校验;0→1;渲染两张待签(hx_acceptance+hx_report,双出×2=4 附件) */
     @Transactional
@@ -593,6 +609,7 @@ public class HxService {
             throw new BizException("仅草稿可提交");
         }
         requireConfirmed(flow.getProjectId(), "验收单");
+        guardAcceptanceNoInflightChange(flow.getProjectId());
         validateAcceptanceRequired(flow);
         validateAcceptanceAmounts(flow.getProjectId(), flow);
         transit(flowId, HxFlowStatus.DRAFT, HxFlowStatus.SUBMITTED);

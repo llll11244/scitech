@@ -10,6 +10,7 @@
   E  开始时间不得晚于结束时间(登记+变更执行周期)
   F  结题项目禁止教师再发起变更(admin 链路不受限)
   G  到账金额统一 setScale(2) 入库与通知同值
+  H  变更/验收互斥(2026-11-05 拍板):在途变更禁提验收(③)+结题后批在途变更拒(②封竞态窗口)
 前置:应用已启动(dev);admin/admin123,teacher/teacher2 密码 123(旧口径 teacher123 兜底)。
 说明:探针全部断言「修复后应然行为」——修复前运行本脚本,上述标记项应显红(即 bug 实证)。
 """
@@ -296,9 +297,23 @@ def main():
     r = post(t2, "/hx/acceptance/submit", {"flowId": af})
     check("D4 使用经费>到账拒(R5)", r.get("code") != 0 and "不得超过" in (r.get("msg") or ""),
           str(r.get("msg"))[:60])
+    # ③ 在途变更时禁提验收(2026-11-05 拍板:变更须先办结,验收基于变更后口径)
+    cf_p = post(t2, "/hx/change/draft", {"projectId": pid, "changeType": "项目经费",
+                "newAmount": "405000.00", "changeContent": "在途变更(③探针)"})["data"]
+    post(t2, "/hx/change/submit", {"flowId": cf_p})
+    r = post(t2, "/hx/acceptance/submit", {"flowId": af})
+    check("③ 在途变更时提交验收拒", r.get("code") != 0 and "变更单" in (r.get("msg") or ""),
+          str(r.get("msg"))[:60])
+    post(t2, "/hx/%d/cancel" % cf_p)
     r = post(t2, "/hx/acceptance/draft", dict(acc, flowId=af, members=mem_ok))
     r = post(t2, "/hx/acceptance/submit", {"flowId": af})
     check("D5 验收提交 0→1", r.get("code") == 0 and detail(t2, af)["flow"]["status"] == 1, str(r.get("msg"))[:60])
+    # ② 竞态窗口探针:验收在途时插入一张变更并推到已回扫,验收先结题后该变更须批不动
+    cf4 = post(t2, "/hx/change/draft", {"projectId": pid, "changeType": "项目经费",
+               "newAmount": "410000.00", "changeContent": "与验收并行(②探针)"})["data"]
+    post(t2, "/hx/change/submit", {"flowId": cf4})
+    post(A, "/hx/%d/precheck" % cf4)
+    scan_upload(t2, cf4, "变更表")
     post(A, "/hx/%d/precheck" % af)
     scan_upload(t2, af, "验收登记表")
     check("D6 验收登记表扫描件 5→2", detail(t2, af)["flow"]["status"] == 2, "")
@@ -313,6 +328,12 @@ def main():
     check("D7 验收通过结题+核定额", d["flow"]["status"] == 3 and ap["status"] == "结题"
           and ap["execStatus"] == "已结题" and money(d["hx"]["verifiedAmount"]) == 200000.0,
           str({k: ap.get(k) for k in ("status", "execStatus")}))
+    # ② 结题后批在途变更拒(2026-11-05 拍板:竞态窗口封口),随后 admin 退回→教师取消清理
+    r = post(A, "/hx/%d/review" % cf4, {})
+    check("② 结题后批变更拒", r.get("code") != 0 and "结题" in (r.get("msg") or ""),
+          str(r.get("msg"))[:60])
+    post(A, "/hx/%d/reject" % cf4, {"opinion": "项目已结题,变更不再受理", "isPrecheck": False})
+    post(t2, "/hx/%d/cancel" % cf4)
     r = get(t2, "/hx/%d/funding" % pid)
     check("D8 结题后教师到账仍可读", r.get("code") == 0, str(r.get("msg"))[:40])
 

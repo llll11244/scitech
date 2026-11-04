@@ -183,6 +183,9 @@ public class HxAuditService {
     private void approveChange(Long adminId, String adminName, RpHxFlow flow) {
         Long pid = flow.getProjectId();
         RpProject p = requireProject(pid);
+        // 2026-11-05 用户拍板 ②:结题项目变更不再生效——教师端发起已被 guardNotConcluded 拦,
+        // 此处封「验收与变更并行、验收先结题」的竞态窗口(批结题后变更=再变更,非 adminSave 修数据)
+        HxService.guardNotConcluded(p);
         transitAndConfirm(flow);
         List<String> types = List.of(RenderModelBuilder.splitTrim(flow.getChangeType()));
         boolean leaderChanged = false;
