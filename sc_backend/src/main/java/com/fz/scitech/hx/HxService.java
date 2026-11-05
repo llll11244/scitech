@@ -657,6 +657,11 @@ public class HxService {
     @Transactional
     public void resubmit(Long uid, String username, Long flowId) {
         RpHxFlow flow = ownedFlow(uid, flowId);
+        if ("acceptance".equals(flow.getFlowType())) {
+            // 重交(4→1/5→1)与提交同为验收入科技处流程的入口,在途变更守卫③须同口径
+            // (2026-11-05 三轮审核①:退回单先重交、变更后批的顺序差可令验收按旧周期口径结题)
+            guardAcceptanceNoInflightChange(flow.getProjectId());
+        }
         if (flow.getStatus() == HxFlowStatus.REJECTED) {
             transit(flowId, HxFlowStatus.REJECTED, HxFlowStatus.SUBMITTED);
             invalidateOld(flow, "scan", null, "hx_scan");   // 旧扫描件作废(重交须重新盖章回扫)

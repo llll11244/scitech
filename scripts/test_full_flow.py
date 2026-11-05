@@ -327,6 +327,20 @@ def main():
     r = post(t2, "/hx/acceptance/draft", dict(acc, flowId=af, members=mem_ok))
     r = post(t2, "/hx/acceptance/submit", {"flowId": af})
     check("D5 验收提交 0→1", r.get("code") == 0 and detail(t2, af)["flow"]["status"] == 1, str(r.get("msg"))[:60])
+    # ③b 重交绕过探针(三轮审核①):resubmit(4→1/5→1)与提交同为验收入科技处流程的入口,
+    #    在途变更守卫③须同口径——退回态验收单在有在途变更时重交应拒;变更取消后方可重交回 1
+    post(A, "/hx/%d/reject" % af, {"opinion": "验收材料退回修改(③b探针)", "isPrecheck": True})
+    cf_p2 = post(t2, "/hx/change/draft", {"projectId": pid, "changeType": "项目经费",
+                "newAmount": "405000.00", "changeContent": "在途变更(③b探针)"})["data"]
+    post(t2, "/hx/change/submit", {"flowId": cf_p2})
+    r = post(t2, "/hx/%d/resubmit" % af)
+    check("③b 在途变更时重交验收拒", r.get("code") != 0 and "变更单" in (r.get("msg") or ""),
+          str(r.get("msg"))[:60])
+    post(t2, "/hx/%d/cancel" % cf_p2)
+    if r.get("code") != 0:   # 修复后路径:守卫拦下,变更取消后重交回 1(修复前 ③b 已误过,af 本就在 1)
+        r = post(t2, "/hx/%d/resubmit" % af)
+        check("③b-c 变更取消后重交回 1", r.get("code") == 0
+              and detail(t2, af)["flow"]["status"] == 1, str(r.get("msg"))[:60])
     # ② 竞态窗口探针:验收在途时插入一张变更并推到已回扫,验收先结题后该变更须批不动
     cf4 = post(t2, "/hx/change/draft", {"projectId": pid, "changeType": "项目经费",
                "newAmount": "410000.00", "changeContent": "与验收并行(②探针)"})["data"]
