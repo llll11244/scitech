@@ -11,6 +11,8 @@
   F  结题项目禁止教师再发起变更(admin 链路不受限)
   G  到账金额统一 setScale(2) 入库与通知同值
   H  变更/验收互斥(2026-11-05 拍板):在途变更禁提验收(③)+结题后批在途变更拒(②封竞态窗口)
+  I  审批终态复检(二轮审核①):登记 R1/验收 R3-R6 在 2→3 批前按库中终态复检(教师自改/admin 删到账漂移)
+  J  成员比例 0~100 保存级边界(二轮审核②):拦 DECIMAL(5,2) 溢出「系统异常」/负数/超100
 前置:应用已启动(dev);admin/admin123,teacher/teacher2 密码 123(旧口径 teacher123 兜底)。
 说明:探针全部断言「修复后应然行为」——修复前运行本脚本,上述标记项应显红(即 bug 实证)。
 """
@@ -163,6 +165,12 @@ def main():
     check("D 金额超 DECIMAL(14,2) 上限友好拒", r.get("code") != 0
           and ("最大" in (r.get("msg") or "") or "超过" in (r.get("msg") or ""))
           and "系统异常" not in (r.get("msg") or ""), str(r.get("msg"))[:60])
+    # J2 比例保存级边界(二轮②):超999.99(库溢出)/超100/负数 一律友好拒(不建项目)
+    for ratio, tag in [("12345.00", "超999.99"), ("150.00", "超100"), ("-5.00", "负数")]:
+        r = post(t, "/hx/register/draft", dict(dto, name="比例边界" + tag,
+               members=[{"memberType": "教师", "name": "甲", "ratio": ratio, "sortNo": 1}]))
+        check("J2 比例%s保存拒(0~100)" % tag, r.get("code") != 0 and "比例" in (r.get("msg") or ""),
+              str(r.get("msg"))[:40])
     r = post(t, "/hx/register/draft", dict(p2, hx=dict(dto["hx"])))
     check("A17 P2 草稿建立", r.get("code") == 0, str(r.get("msg"))[:60])
     fid2 = r["data"]
@@ -190,6 +198,20 @@ def main():
     check("A2b 借变更单id提交登记被拒", r.get("code") != 0 and "登记" in (r.get("msg") or "")
           and ap2["auditStatus"] == 0, "code=%s audit=%s" % (r.get("code"), ap2["auditStatus"]))
     post(t, "/hx/%d/cancel" % c2)                      # 清理 C2(0/1 两态均可取消)
+    # J1 审批终态复检(二轮①):P2 配平提交→预审→5态改预算不等→回扫→审批须拒;自愈 2→5→1→0 删
+    post(t, "/hx/register/draft", dict(dto, flowId=fid2, name="边界探针P2",
+           budgets=[{"subject": "业务费", "amount": "355000.00"}]))
+    post(t, "/hx/register/submit", {"flowId": fid2})
+    post(A, "/hx/%d/precheck" % fid2)
+    post(t, "/hx/register/draft", dict(dto, flowId=fid2, name="边界探针P2",
+           budgets=[{"subject": "业务费", "amount": "1.00"}]))
+    scan_upload(t, fid2, "登记表")
+    r = post(A, "/hx/%d/review" % fid2, {})
+    check("J1 预算漂移审批终检拒", r.get("code") != 0 and "预算合计" in (r.get("msg") or ""),
+          str(r.get("msg"))[:60])
+    post(t, "/hx/%d/withdraw" % fid2)   # 2→5
+    post(t, "/hx/%d/resubmit" % fid2)   # 5→1
+    post(t, "/hx/%d/withdraw" % fid2)   # 1→0
     r = requests.delete(BASE + "/hx/%d" % fid2, headers=t, timeout=30).json()
     check("A19 P2 清理删除", r.get("code") == 0 and my_project(t, pid2) is None,
           str(r.get("msg"))[:60])
@@ -278,10 +300,7 @@ def main():
     for m, ratio, amount in zip(mem_neg, ["-50.00", "150.00"], ["80000.00", "120000.00"]):
         m["ratio"] = ratio; m["amount"] = amount
     r = post(t2, "/hx/acceptance/draft", dict(acc, flowId=af, members=mem_neg))
-    r = post(t2, "/hx/acceptance/submit", {"flowId": af})
-    if r.get("code") == 0:   # 修复前:负比例合计仍 100 会放行,撤回自愈
-        post(t2, "/hx/%d/withdraw" % af)
-    check("D2 成员比例/金额为负拒", r.get("code") != 0 and "负" in (r.get("msg") or ""),
+    check("D2 成员比例越界拒(保存级0~100)", r.get("code") != 0 and "比例" in (r.get("msg") or ""),
           str(r.get("msg"))[:60])
     mem_bad_amt = [dict(x) for x in detail(t2, af)["members"]]
     for m, ratio, amount in zip(mem_bad_amt, ["40.00", "60.00"], ["80000.00", "110000.00"]):
@@ -323,6 +342,14 @@ def main():
           and not concluded, str(r.get("msg"))[:60])
     if not concluded:
         scan_upload(t2, af, "验收报告")
+        # J3 审批终态复检-到账漂移(二轮①):删到账→R6/R4 口径漂移,审批须拒;复录后批过
+        rec1 = get(t2, "/hx/%d/funding" % pid)["data"]["records"][0]["id"]
+        requests.delete(BASE + "/hx/funding/%d" % rec1, headers=A, timeout=30)
+        r = post(A, "/hx/%d/review" % af, {"verifiedAmount": "200000.00"})
+        check("J3 删到账口径漂移审批终检拒", r.get("code") != 0 and "到账" in (r.get("msg") or ""),
+              str(r.get("msg"))[:60])
+        post(A, "/hx/funding", {"projectId": pid, "amount": "200000.00",
+             "receivedDate": "2026-05-20", "payer": "全流程委托公司"})
         r = post(A, "/hx/%d/review" % af, {"verifiedAmount": "200000.00"})
     d = detail(t2, af); ap = admin_project(pid)
     check("D7 验收通过结题+核定额", d["flow"]["status"] == 3 and ap["status"] == "结题"

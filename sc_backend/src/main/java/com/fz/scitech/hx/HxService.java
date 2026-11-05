@@ -1193,6 +1193,12 @@ public class HxService {
             lenCheck(m.getDuty(), 500, "成员工作任务");
             lenCheck(m.getStudentNo(), 32, "学号");
             lenCheck(m.getMentor(), 64, "指导老师");
+            // 比例边界(2026-11-05 二轮审核②):0~100 之外拒保存——上限拦 DECIMAL(5,2) 溢出落
+            // 「系统异常」(实证 12345),下限拦负数凑 100%;登记环节此前全程不校验比例(150% 可入库过审)
+            if (m.getRatio() != null && (m.getRatio().signum() < 0
+                    || m.getRatio().compareTo(BigDecimal.valueOf(100)) > 0)) {
+                throw new BizException("成员比例应在 0~100 之间:" + m.getName());
+            }
             amountCheck(m.getAmount(), "成员经费分配金额");
             RpMember e = toMemberEntity(m, projectId, createBy);
             if (e.getSortNo() == null) {

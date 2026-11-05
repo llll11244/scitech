@@ -167,6 +167,9 @@ public class HxAuditService {
     private void approveRegister(Long adminId, String adminName, RpHxFlow flow) {
         Long pid = flow.getProjectId();
         RpProject p = requireProject(pid);
+        // 审批终态复检(2026-11-05 二轮审核①):教师 1/2/5 态自改可使预算偏离 R1(实证:预算 1 元≠
+        // 合同经费照样批过立项),批前按库中终态复检;不通过=退回教师改或 admin 代改修正后再批
+        hxService.validateRegisterBudgets(pid, hxService.requireHx(pid).getContractAmount());
         transitAndConfirm(flow);
         // 编号 HX{年}-{序}:序=当年 max+1;uk_approval_no 兜底并发,冲突重试一次
         String approvalNo = allotApprovalNo(pid);
@@ -243,6 +246,10 @@ public class HxAuditService {
         HxService.amountCheck(verifiedAmount, "核定到账金额");
         Long pid = flow.getProjectId();
         RpProject p = requireProject(pid);
+        // 审批终态复检(2026-11-05 二轮审核①):教师 1/2/5 态自改必填/金额、或 admin 删到账使
+        // R3-R6 口径漂移,批前按库中终态复检(到账累计实时 SUM,决策#16)
+        hxService.validateAcceptanceRequired(flow);
+        hxService.validateAcceptanceAmounts(pid, flow);
         LocalDate today = LocalDate.now();
         transitAndConfirm(flow);
         projectMapper.update(null, new LambdaUpdateWrapper<RpProject>()
