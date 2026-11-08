@@ -13,3 +13,9 @@ libreoffice/
 dist-demo/
 # 演示包构建下载缓存(mysql zip 等 248MB,勿提交)
 scripts/cache/
+
+# 会话日志/构建产物/部署凭据(2026-11-08 推 GitHub 前清理)
+backend-*.log
+sc_frontend/dist.tgz
+scripts/deploy_secrets.py
+__pycache__/
